@@ -58,7 +58,7 @@ Bold Brew is the **official Terminal UI** for managing Homebrew in [**Project Bl
 Manage **Homebrew formulae**, **casks**, **Flatpak**, and **Mac App Store** apps from one interface. Install, update, and remove packages with confirmation dialogs and real-time streaming output.
 
 ### Discovery and Filtering
-Fast search across 15,000+ packages. Filter by installed, outdated, leaves, casks, or formulae. Sort by download popularity or name. See type indicators `[F]` `[C]` `[M]` at a glance.
+Fast search across 15,000+ packages. Filter by installed, outdated, or leaves, combined with casks or formulae. Sort by download popularity or name. See type indicators `[F]` `[C]` `[M]` at a glance.
 
 ### Brewfile Workflows
 Load Brewfiles from local paths or remote URLs. Batch install/remove entire collections. Export your installed packages to a `~/Brewfile` with one keystroke. Supports `brew`, `cask`, `tap`, `mas`, and `flatpak` entries.
@@ -113,8 +113,12 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | Key | Action |
 |-----|--------|
 | `/` | Search packages |
-| `↑/↓` or `j/k` | Navigate list |
-| `Esc` | Back to table |
+| `Up/Down`, `j/k`, `Ctrl+N/P` | Move down/up |
+| `g/G`, `Home/End`, `Alt+<`/`Alt+>` | Go to top/bottom |
+| `Ctrl+D/U` | Half page down/up |
+| `Ctrl+F/B`, `PgDn/PgUp`, `Ctrl+V`/`Alt+V` | Page down/up |
+| `Tab` / `Shift+Tab` | Switch active panel (table, details, output) |
+| `Esc` | Back to table; quit from the table |
 | `?` | Help screen |
 | `q` | Quit |
 
@@ -122,12 +126,12 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 
 | Key | Action |
 |-----|--------|
-| `f` | Toggle installed |
+| `f` | Filter picker: combine Installed/Outdated/Leaves with Formulae/Casks |
 | `o` | Toggle outdated |
 | `l` | Toggle leaves |
 | `c` | Toggle casks |
 | `F` | Toggle formulae |
-| `s` | Cycle sort (None → Downloads → Name) |
+| `s` | Cycle sort (None, Downloads, Name) |
 
 ### Package Operations
 
@@ -136,9 +140,9 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | `i` | Install selected |
 | `u` | Update selected |
 | `r` | Remove selected |
+| `U` | Update all outdated |
 | `v` | Vulnerability scan |
 | `e` | Export to ~/Brewfile |
-| `Ctrl+U` | Update all outdated |
 
 ### Brewfile Mode
 
@@ -146,6 +150,12 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 |-----|--------|
 | `Ctrl+A` | Install all from Brewfile |
 | `Ctrl+R` | Remove all from Brewfile |
+
+### View
+
+| Key | Action |
+|-----|--------|
+| `b` | Toggle borders (also hidden automatically on narrow terminals) |
 
 </details>
 
