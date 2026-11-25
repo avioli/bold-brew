@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,7 +40,7 @@ type AppService struct {
 	mu               sync.RWMutex // Protects packages, filteredPackages, brewfilePackages, activeFilter
 	packages         *[]models.Package
 	filteredPackages *[]models.Package
-	activeFilter     FilterType
+	activeFilter     PackageFilter
 	activeSort       models.SortMode
 	brewVersion      string
 
@@ -72,7 +73,6 @@ var NewAppService = func() AppServiceInterface {
 
 		packages:         new([]models.Package),
 		filteredPackages: new([]models.Package),
-		activeFilter:     FilterNone,
 		brewVersion:      "-",
 
 		brewfilePath:     "",
@@ -158,19 +158,25 @@ func (s *AppService) BuildApp() {
 	// Build the layout
 	s.layout.Setup()
 
-	// Update header and enable Brewfile mode features if needed
-	headerName := AppName
+	// Enable Brewfile mode features if needed
 	if s.IsBrewfileMode() {
-		headerName = fmt.Sprintf("%s [Brewfile Mode]", AppName)
 		s.layout.GetSearch().Field().SetLabel("Search (Brewfile): ")
 		s.inputService.EnableBrewfileMode() // Add Install All action
 	}
-	s.layout.GetHeader().Update(headerName, AppVersion, s.brewVersion)
+
+	// Status messages are queued; let the notifier redraw from its timer.
+	s.layout.GetNotifier().SetScheduler(func(f func()) { s.app.QueueUpdateDraw(f) })
+	s.layout.GetNotifier().ShowInfo("Using " + firstLine(s.brewVersion))
+
+	// Adapt the layout to the screen width before every draw.
+	s.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		width, height := screen.Size()
+		s.layout.Resize(width, height)
+		return false
+	})
 
 	// Evaluate if there is a new version available
 	// This is done in a goroutine to avoid blocking the UI during startup
-	// In the future, this could be replaced with a more sophisticated update check, and update
-	// the user if a new version is available instantly instead of waiting for the next app start
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -180,12 +186,7 @@ func (s *AppService) BuildApp() {
 			return
 		}
 		s.app.QueueUpdateDraw(func() {
-			displayVersion := fmt.Sprintf("%s ([orange]New Version Available: %s[-])", AppVersion, latestVersion)
-			headerName := AppName
-			if s.IsBrewfileMode() {
-				headerName = fmt.Sprintf("%s [Brewfile Mode]", AppName)
-			}
-			s.layout.GetHeader().Update(headerName, displayVersion, s.brewVersion)
+			s.layout.GetNotifier().ShowWarning(fmt.Sprintf("%s %s: new version available: %s", AppName, AppVersion, latestVersion))
 		})
 	}()
 
@@ -236,4 +237,10 @@ func (s *AppService) BuildApp() {
 	} else {
 		s.setResults(s.packages, true) // Show all packages
 	}
+}
+
+// firstLine returns the first line of s.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
 }

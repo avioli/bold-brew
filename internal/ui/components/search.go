@@ -13,6 +13,9 @@ type Search struct {
 	field   *tview.InputField
 	counter *tview.TextView
 	theme   *theme.Theme
+
+	compact         bool
+	total, filtered int
 }
 
 func NewSearch(theme *theme.Theme) *Search {
@@ -38,7 +41,24 @@ func (s *Search) SetHandlers(done func(key tcell.Key), changed func(text string)
 }
 
 func (s *Search) UpdateCounter(total, filtered int) {
-	s.counter.SetText(fmt.Sprintf("Total: %d | Filtered: %d", total, filtered))
+	s.total, s.filtered = total, filtered
+	s.renderCounter()
+}
+
+// SetCompact switches the counter between "Filtered: M | Total: N" and "M/N".
+func (s *Search) SetCompact(compact bool) {
+	if s.compact != compact {
+		s.compact = compact
+		s.renderCounter()
+	}
+}
+
+func (s *Search) renderCounter() {
+	if s.compact {
+		s.counter.SetText(fmt.Sprintf("%d/%d", s.filtered, s.total))
+		return
+	}
+	s.counter.SetText(fmt.Sprintf("Filtered: %d | Total: %d", s.filtered, s.total))
 }
 
 func (s *Search) Field() *tview.InputField {

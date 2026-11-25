@@ -1,13 +1,13 @@
 package components
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/rivo/tview"
 
 	"bbrew/internal/ui/theme"
 )
+
+// LegendText is the short help line shown in the status bar.
+const LegendText = "? Help | Esc/q Quit"
 
 type Legend struct {
 	view  *tview.TextView
@@ -17,8 +17,9 @@ type Legend struct {
 func NewLegend(theme *theme.Theme) *Legend {
 	legendView := tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter).
-		SetTextColor(theme.LegendColor)
+		SetTextAlign(tview.AlignRight).
+		SetTextColor(theme.LegendColor).
+		SetText(LegendText)
 
 	return &Legend{
 		view:  legendView,
@@ -30,31 +31,7 @@ func (l *Legend) View() *tview.TextView {
 	return l.view
 }
 
-func (l *Legend) GetFormattedLabel(keySlug, label string, active bool) string {
-	if active {
-		return fmt.Sprintf("[yellow::b]%s[-]", tview.Escape(fmt.Sprintf("[%s] %s", keySlug, label)))
-	}
-
-	return tview.Escape(fmt.Sprintf("[%s] %s", keySlug, label))
-}
-
-func (l *Legend) SetLegend(legend []struct{ KeySlug, Name string }, activeKey string) {
-	var builder strings.Builder
-	for i, item := range legend {
-		active := item.KeySlug == activeKey
-		builder.WriteString(l.GetFormattedLabel(item.KeySlug, item.Name, active))
-		if i < len(legend)-1 {
-			builder.WriteString(" | ")
-		}
-	}
-
-	l.SetText(builder.String())
-}
-
-func (l *Legend) SetText(text string) {
-	l.view.SetText(text)
-}
-
-func (l *Legend) Clear() {
-	l.view.Clear()
+// Width is the number of columns the legend needs.
+func (l *Legend) Width() int {
+	return tview.TaggedStringWidth(LegendText) + 1
 }

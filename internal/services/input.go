@@ -5,31 +5,39 @@ import (
 	"io"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"bbrew/internal/models"
 	"bbrew/internal/ui"
+	"bbrew/internal/ui/components"
 )
 
-// FilterType represents the active package filter state.
-type FilterType int
-
+// Help screen sections, in display order.
 const (
-	FilterNone FilterType = iota
-	FilterInstalled
-	FilterOutdated
-	FilterLeaves
-	FilterCasks
-	FilterFormulae
+	sectionFilters  = "FILTERS"
+	sectionActions  = "ACTIONS"
+	sectionBrewfile = "BREWFILE"
+	sectionView     = "VIEW"
 )
 
 // InputAction represents a user action that can be triggered by a key event.
 type InputAction struct {
-	Key            tcell.Key
-	Rune           rune
-	Name           string
-	KeySlug        string
-	Action         func()
-	HideFromLegend bool // If true, this action won't appear in the legend bar
+	Key     tcell.Key
+	Rune    rune
+	Name    string
+	KeySlug string // how the key is shown in the help screen
+	Section string // help screen section
+	Action  func()
+}
+
+// matches reports whether the event triggers this action.
+func (a *InputAction) matches(event *tcell.EventKey) bool {
+	if a.Key == tcell.KeyRune {
+		// Shift is implied by the rune itself; Alt/Ctrl make it a different key.
+		return event.Key() == tcell.KeyRune && event.Rune() == a.Rune &&
+			event.Modifiers()&(tcell.ModAlt|tcell.ModCtrl) == 0
+	}
+	return event.Key() == a.Key
 }
 
 // InputServiceInterface defines the interface for handling user input actions.
@@ -45,27 +53,29 @@ type InputService struct {
 	brewService    BrewServiceInterface
 	flatpakService FlatpakServiceInterface
 	keyActions     []*InputAction
-	legendEntries  []struct{ KeySlug, Name string }
 
 	// Actions for each key input
-	ActionSearch          *InputAction
-	ActionFilterInstalled *InputAction
-	ActionFilterOutdated  *InputAction
-	ActionFilterLeaves    *InputAction
-	ActionFilterCasks     *InputAction
-	ActionFilterFormulae  *InputAction
-	ActionSort            *InputAction
-	ActionExport          *InputAction
-	ActionVulnScan        *InputAction
-	ActionInstall         *InputAction
-	ActionUpdate          *InputAction
-	ActionRemove          *InputAction
-	ActionUpdateAll       *InputAction
-	ActionInstallAll      *InputAction
-	ActionRemoveAll       *InputAction
-	ActionHelp            *InputAction
-	ActionBack            *InputAction
-	ActionQuit            *InputAction
+	ActionSearch         *InputAction
+	ActionFilterPicker   *InputAction
+	ActionFilterOutdated *InputAction
+	ActionFilterLeaves   *InputAction
+	ActionFilterCasks    *InputAction
+	ActionFilterFormulae *InputAction
+	ActionSort           *InputAction
+	ActionExport         *InputAction
+	ActionVulnScan       *InputAction
+	ActionInstall        *InputAction
+	ActionUpdate         *InputAction
+	ActionRemove         *InputAction
+	ActionUpdateAll      *InputAction
+	ActionInstallAll     *InputAction
+	ActionRemoveAll      *InputAction
+	ActionToggleBorders  *InputAction
+	ActionNextPanel      *InputAction
+	ActionPrevPanel      *InputAction
+	ActionHelp           *InputAction
+	ActionBack           *InputAction
+	ActionQuit           *InputAction
 }
 
 var NewInputService = func(appService *AppService, brewService BrewServiceInterface, flatpakService FlatpakServiceInterface) InputServiceInterface {
@@ -78,89 +88,95 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 
 	// Initialize actions with key bindings and handlers
 	s.ActionSearch = &InputAction{
-		Key: tcell.KeyRune, Rune: '/', KeySlug: "/", Name: "Search",
+		Key: tcell.KeyRune, Rune: '/', KeySlug: "/", Name: "Focus search",
 		Action: s.handleSearchFieldEvent,
 	}
-	s.ActionFilterInstalled = &InputAction{
-		Key: tcell.KeyRune, Rune: 'f', KeySlug: "f", Name: "Installed",
-		Action: s.handleFilterPackagesEvent,
+	s.ActionFilterPicker = &InputAction{
+		Key: tcell.KeyRune, Rune: 'f', KeySlug: "f", Name: "Filter picker", Section: sectionFilters,
+		Action: s.handleFilterPickerEvent,
 	}
 	s.ActionFilterOutdated = &InputAction{
-		Key: tcell.KeyRune, Rune: 'o', KeySlug: "o", Name: "Outdated",
-		Action: s.handleFilterOutdatedPackagesEvent, HideFromLegend: true,
+		Key: tcell.KeyRune, Rune: 'o', KeySlug: "o", Name: "Toggle outdated", Section: sectionFilters,
+		Action: func() { s.toggleStatusFilter(StatusOutdated) },
 	}
 	s.ActionFilterLeaves = &InputAction{
-		Key: tcell.KeyRune, Rune: 'l', KeySlug: "l", Name: "Leaves",
-		Action: s.handleFilterLeavesEvent, HideFromLegend: true,
+		Key: tcell.KeyRune, Rune: 'l', KeySlug: "l", Name: "Toggle leaves", Section: sectionFilters,
+		Action: func() { s.toggleStatusFilter(StatusLeaves) },
 	}
 	s.ActionFilterCasks = &InputAction{
-		Key: tcell.KeyRune, Rune: 'c', KeySlug: "c", Name: "Casks",
-		Action: s.handleFilterCasksEvent, HideFromLegend: true,
+		Key: tcell.KeyRune, Rune: 'c', KeySlug: "c", Name: "Toggle casks", Section: sectionFilters,
+		Action: func() { s.toggleKindFilter(KindCasks) },
 	}
 	s.ActionFilterFormulae = &InputAction{
-		Key: tcell.KeyRune, Rune: 'F', KeySlug: "F", Name: "Formulae",
-		Action: s.handleFilterFormulaeEvent, HideFromLegend: true,
+		Key: tcell.KeyRune, Rune: 'F', KeySlug: "F", Name: "Toggle formulae", Section: sectionFilters,
+		Action: func() { s.toggleKindFilter(KindFormulae) },
 	}
 	s.ActionSort = &InputAction{
-		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Sort",
+		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Cycle sort (none, downloads, name)", Section: sectionFilters,
 		Action: s.handleSortEvent,
 	}
-	s.ActionExport = &InputAction{
-		Key: tcell.KeyRune, Rune: 'e', KeySlug: "e", Name: "Export",
-		Action: s.handleExportEvent,
-	}
-	s.ActionVulnScan = &InputAction{
-		Key: tcell.KeyRune, Rune: 'v', KeySlug: "v", Name: "Vuln Scan",
-		Action: s.handleVulnScanEvent,
-	}
 	s.ActionInstall = &InputAction{
-		Key: tcell.KeyRune, Rune: 'i', KeySlug: "i", Name: "Install",
+		Key: tcell.KeyRune, Rune: 'i', KeySlug: "i", Name: "Install selected", Section: sectionActions,
 		Action: s.handleInstallPackageEvent,
 	}
 	s.ActionUpdate = &InputAction{
-		Key: tcell.KeyRune, Rune: 'u', KeySlug: "u", Name: "Update",
+		Key: tcell.KeyRune, Rune: 'u', KeySlug: "u", Name: "Update selected", Section: sectionActions,
 		Action: s.handleUpdatePackageEvent,
 	}
 	s.ActionRemove = &InputAction{
-		Key: tcell.KeyRune, Rune: 'r', KeySlug: "r", Name: "Remove",
+		Key: tcell.KeyRune, Rune: 'r', KeySlug: "r", Name: "Remove selected", Section: sectionActions,
 		Action: s.handleRemovePackageEvent,
 	}
 	s.ActionUpdateAll = &InputAction{
-		Key: tcell.KeyCtrlU, Rune: 0, KeySlug: "ctrl+u", Name: "Update All",
-		Action: s.handleUpdateAllPackagesEvent, HideFromLegend: true,
+		Key: tcell.KeyRune, Rune: 'U', KeySlug: "U", Name: "Update all outdated", Section: sectionActions,
+		Action: s.handleUpdateAllPackagesEvent,
+	}
+	s.ActionVulnScan = &InputAction{
+		Key: tcell.KeyRune, Rune: 'v', KeySlug: "v", Name: "Vulnerability scan", Section: sectionActions,
+		Action: s.handleVulnScanEvent,
+	}
+	s.ActionExport = &InputAction{
+		Key: tcell.KeyRune, Rune: 'e', KeySlug: "e", Name: "Export to ~/Brewfile", Section: sectionActions,
+		Action: s.handleExportEvent,
 	}
 	s.ActionInstallAll = &InputAction{
-		Key: tcell.KeyCtrlA, Rune: 0, KeySlug: "ctrl+a", Name: "Install All (Brewfile)",
+		Key: tcell.KeyCtrlA, KeySlug: "Ctrl+A", Name: "Install all from Brewfile", Section: sectionBrewfile,
 		Action: s.handleInstallAllPackagesEvent,
 	}
 	s.ActionRemoveAll = &InputAction{
-		Key: tcell.KeyCtrlR, Rune: 0, KeySlug: "ctrl+r", Name: "Remove All (Brewfile)",
+		Key: tcell.KeyCtrlR, KeySlug: "Ctrl+R", Name: "Remove all from Brewfile", Section: sectionBrewfile,
 		Action: s.handleRemoveAllPackagesEvent,
 	}
+	s.ActionToggleBorders = &InputAction{
+		Key: tcell.KeyRune, Rune: 'b', KeySlug: "b", Name: "Toggle borders", Section: sectionView,
+		Action: s.layout.ToggleBorders,
+	}
+	s.ActionNextPanel = &InputAction{
+		Key: tcell.KeyTab, Action: func() { s.cyclePanel(1) },
+	}
+	s.ActionPrevPanel = &InputAction{
+		Key: tcell.KeyBacktab, Action: func() { s.cyclePanel(-1) },
+	}
 	s.ActionHelp = &InputAction{
-		Key: tcell.KeyRune, Rune: '?', KeySlug: "?", Name: "Help",
-		Action: s.handleHelpEvent,
+		Key: tcell.KeyRune, Rune: '?', Action: s.handleHelpEvent,
 	}
 	s.ActionBack = &InputAction{
-		Key: tcell.KeyEsc, Rune: 0, KeySlug: "esc", Name: "Back to Table",
-		Action: s.handleBack, HideFromLegend: true,
+		Key: tcell.KeyEsc, Action: s.handleBack,
 	}
 	s.ActionQuit = &InputAction{
-		Key: tcell.KeyRune, Rune: 'q', KeySlug: "q", Name: "Quit",
-		Action: s.handleQuitEvent, HideFromLegend: true,
+		Key: tcell.KeyRune, Rune: 'q', Action: s.handleQuitEvent,
 	}
 
-	// Build keyActions slice (InstallAll/RemoveAll added dynamically in Brewfile mode)
+	// InstallAll/RemoveAll are added in Brewfile mode
 	s.keyActions = []*InputAction{
-		s.ActionSearch, s.ActionFilterInstalled, s.ActionFilterOutdated,
+		s.ActionSearch, s.ActionFilterPicker, s.ActionFilterOutdated,
 		s.ActionFilterLeaves, s.ActionFilterCasks, s.ActionFilterFormulae,
-		s.ActionSort, s.ActionExport, s.ActionVulnScan, s.ActionInstall,
-		s.ActionUpdate, s.ActionRemove, s.ActionUpdateAll, s.ActionHelp,
-		s.ActionBack, s.ActionQuit,
+		s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
+		s.ActionUpdateAll, s.ActionVulnScan, s.ActionExport,
+		s.ActionToggleBorders, s.ActionNextPanel, s.ActionPrevPanel,
+		s.ActionHelp, s.ActionBack, s.ActionQuit,
 	}
 
-	// Convert keyActions to legend entries
-	s.updateLegendEntries()
 	return s
 }
 
@@ -169,58 +185,138 @@ func (s *InputService) outputWriter() io.Writer {
 	return ui.NewThreadSafeWriter(s.appService.app, s.layout.GetOutput().View())
 }
 
-// updateLegendEntries updates the legend entries based on current keyActions
-func (s *InputService) updateLegendEntries() {
-	s.legendEntries = make([]struct{ KeySlug, Name string }, 0, len(s.keyActions))
-	for _, input := range s.keyActions {
-		if !input.HideFromLegend {
-			s.legendEntries = append(s.legendEntries, struct{ KeySlug, Name string }{KeySlug: input.KeySlug, Name: input.Name})
-		}
-	}
-	s.layout.GetLegend().SetLegend(s.legendEntries, "")
+// EnableBrewfileMode enables Brewfile mode, adding Install All and Remove All actions
+func (s *InputService) EnableBrewfileMode() {
+	s.keyActions = append(s.keyActions, s.ActionInstallAll, s.ActionRemoveAll)
 }
 
-// EnableBrewfileMode enables Brewfile mode, adding Install All and Remove All actions to the legend
-func (s *InputService) EnableBrewfileMode() {
-	// Add Install All and Remove All actions after Update All
-	newActions := []*InputAction{}
-	for _, action := range s.keyActions {
-		newActions = append(newActions, action)
-		if action == s.ActionUpdateAll {
-			newActions = append(newActions, s.ActionInstallAll, s.ActionRemoveAll)
+// panels returns the focusable main panels in Tab order.
+func (s *InputService) panels() []tview.Primitive {
+	return []tview.Primitive{
+		s.layout.GetTable().View(),
+		s.layout.GetDetails().View(),
+		s.layout.GetOutput().View(),
+	}
+}
+
+// focusedPanel returns the index of the focused main panel, or -1 when focus
+// is elsewhere (search field, modal, help, picker).
+func (s *InputService) focusedPanel() int {
+	focus := s.appService.GetApp().GetFocus()
+	for i, p := range s.panels() {
+		if p == focus {
+			return i
 		}
 	}
-	s.keyActions = newActions
-	s.updateLegendEntries()
+	return -1
+}
+
+// cyclePanel moves focus to the next (dir=1) or previous (dir=-1) panel.
+func (s *InputService) cyclePanel(dir int) {
+	panels := s.panels()
+	i := max(s.focusedPanel(), 0)
+	next := (i + dir + len(panels)) % len(panels)
+	s.appService.GetApp().SetFocus(panels[next])
 }
 
 // HandleKeyEventInput processes key events and triggers the corresponding actions.
 func (s *InputService) HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKey {
-	if s.layout.GetSearch().Field().HasFocus() {
+	panel := s.focusedPanel()
+	if panel < 0 {
+		// The search field, modals, help and pickers handle their own keys;
+		// Esc closes overlays.
+		if event.Key() == tcell.KeyEsc && !s.layout.GetSearch().Field().HasFocus() {
+			s.closeOverlay()
+			return nil
+		}
 		return event
 	}
 
+	if translated, handled := s.handleNavigation(event, s.panels()[panel]); handled {
+		return translated
+	}
+
 	for _, input := range s.keyActions {
-		if event.Modifiers() == tcell.ModNone && input.Key == event.Key() && input.Rune == event.Rune() { // Check Rune
-			if input.Action != nil {
-				input.Action()
-				return nil
-			}
-		} else if event.Modifiers() != tcell.ModNone && input.Key == event.Key() { // Check Key only
-			if input.Action != nil {
-				input.Action()
-				return nil
-			}
+		if input.matches(event) && input.Action != nil {
+			input.Action()
+			return nil
 		}
 	}
 
 	return event
 }
 
-// handleBack is called when the user presses the back key (Esc).
-func (s *InputService) handleBack() {
+// handleNavigation implements vim and emacs style movement on top of what
+// tview provides (arrows, j/k, g/G, Home/End, PgUp/PgDn, Ctrl+F/B). It returns
+// the event to pass on and whether it handled the key.
+func (s *InputService) handleNavigation(event *tcell.EventKey, focus tview.Primitive) (*tcell.EventKey, bool) {
+	key := func(k tcell.Key) (*tcell.EventKey, bool) {
+		return tcell.NewEventKey(k, 0, tcell.ModNone), true
+	}
+
+	switch event.Key() {
+	case tcell.KeyCtrlN:
+		return key(tcell.KeyDown)
+	case tcell.KeyCtrlP:
+		return key(tcell.KeyUp)
+	case tcell.KeyCtrlV:
+		return key(tcell.KeyPgDn)
+	case tcell.KeyCtrlD:
+		s.scrollHalfPage(focus, 1)
+		return nil, true
+	case tcell.KeyCtrlU:
+		s.scrollHalfPage(focus, -1)
+		return nil, true
+	case tcell.KeyRune:
+		if event.Modifiers()&tcell.ModAlt != 0 {
+			switch event.Rune() {
+			case '<':
+				return key(tcell.KeyHome)
+			case '>':
+				return key(tcell.KeyEnd)
+			case 'v':
+				return key(tcell.KeyPgUp)
+			}
+		}
+	}
+	return event, false
+}
+
+// scrollHalfPage moves the table selection or scrolls a text panel by half
+// its height.
+func (s *InputService) scrollHalfPage(focus tview.Primitive, dir int) {
+	switch p := focus.(type) {
+	case *tview.Table:
+		_, _, _, height := p.GetInnerRect()
+		step := max((height-1)/2, 1) // minus the fixed header row
+		row, _ := p.GetSelection()
+		last := p.GetRowCount() - 1
+		if last < 1 {
+			return
+		}
+		p.Select(min(max(row+dir*step, 1), last), 0)
+	case *tview.TextView:
+		_, _, _, height := p.GetInnerRect()
+		step := max(height/2, 1)
+		row, col := p.GetScrollOffset()
+		p.ScrollTo(max(row+dir*step, 0), col)
+	}
+}
+
+// closeOverlay returns from a modal, help or picker to the main layout.
+func (s *InputService) closeOverlay() {
 	s.appService.GetApp().SetRoot(s.layout.Root(), true)
 	s.appService.GetApp().SetFocus(s.layout.GetTable().View())
+}
+
+// handleBack is called on Esc: from a side panel go back to the table, from
+// the table quit.
+func (s *InputService) handleBack() {
+	if s.focusedPanel() > 0 {
+		s.appService.GetApp().SetFocus(s.layout.GetTable().View())
+		return
+	}
+	s.handleQuitEvent()
 }
 
 // handleSearchFieldEvent is called when the user presses the search key (/).
@@ -233,102 +329,174 @@ func (s *InputService) handleQuitEvent() {
 	s.appService.GetApp().Stop()
 }
 
+// helpSections builds the help screen content from the key bindings.
+func (s *InputService) helpSections() []components.HelpSection {
+	sections := []components.HelpSection{
+		{Title: "NAVIGATION", Keys: []components.HelpKey{
+			{Keys: "↑/↓, j/k, Ctrl+N/P", Description: "Move down/up"},
+			{Keys: "g/G, Home/End", Description: "Go to top/bottom"},
+			{Keys: "Alt+< / Alt+>", Description: "Go to top/bottom"},
+			{Keys: "Ctrl+D/U", Description: "Half page down/up"},
+			{Keys: "Ctrl+F/B, PgDn/PgUp", Description: "Page down/up"},
+			{Keys: "Ctrl+V / Alt+V", Description: "Page down/up"},
+			{Keys: "Tab / Shift+Tab", Description: "Next/previous panel"},
+			{Keys: "/", Description: "Focus search"},
+			{Keys: "Esc", Description: "Back to table, or quit"},
+			{Keys: "q", Description: "Quit"},
+			{Keys: "?", Description: "This help"},
+		}},
+	}
+
+	for _, title := range []string{sectionFilters, sectionActions, sectionBrewfile, sectionView} {
+		section := components.HelpSection{Title: title}
+		for _, a := range s.keyActions {
+			if a.Section == title {
+				section.Keys = append(section.Keys, components.HelpKey{Keys: a.KeySlug, Description: a.Name})
+			}
+		}
+		if len(section.Keys) > 0 {
+			sections = append(sections, section)
+		}
+	}
+	return sections
+}
+
 // handleHelpEvent shows the help screen with all keyboard shortcuts.
 func (s *InputService) handleHelpEvent() {
-	helpScreen := s.layout.GetHelpScreen()
-	helpScreen.SetBrewfileMode(s.appService.IsBrewfileMode())
-	helpPages := helpScreen.Build(s.layout.Root())
+	helpPages, text := s.layout.GetHelpScreen().Build(s.layout.Root(), s.helpSections(), s.layout.Height()-2)
 
-	// Set up key handler to close help on any key press
-	helpPages.SetInputCapture(func(_ *tcell.EventKey) *tcell.EventKey {
-		// Close help and return to main view
-		s.appService.GetApp().SetRoot(s.layout.Root(), true)
-		s.appService.GetApp().SetFocus(s.layout.GetTable().View())
+	// Scroll keys scroll the help; any other key closes it.
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyUp, tcell.KeyDown, tcell.KeyPgUp, tcell.KeyPgDn, tcell.KeyHome, tcell.KeyEnd,
+			tcell.KeyCtrlF, tcell.KeyCtrlB:
+			return event
+		case tcell.KeyCtrlN:
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case tcell.KeyCtrlP:
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case tcell.KeyCtrlD:
+			return tcell.NewEventKey(tcell.KeyPgDn, 0, tcell.ModNone)
+		case tcell.KeyCtrlU:
+			return tcell.NewEventKey(tcell.KeyPgUp, 0, tcell.ModNone)
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'j', 'k', 'g', 'G':
+				return event
+			}
+		}
+		s.closeOverlay()
 		return nil
 	})
 
 	s.appService.GetApp().SetRoot(helpPages, true)
 }
 
-// handleFilterEvent toggles the filter for packages based on the provided filter type.
-func (s *InputService) handleFilterEvent(filterType FilterType) {
-	// Toggle: if same filter is active, turn it off; otherwise switch to new filter
-	if s.appService.activeFilter == filterType {
-		s.appService.activeFilter = FilterNone
-	} else {
-		s.appService.activeFilter = filterType
-	}
+// toggleStatusFilter toggles a status filter (installed, outdated, leaves).
+func (s *InputService) toggleStatusFilter(status StatusFilter) {
+	s.appService.activeFilter.ToggleStatus(status)
+	s.applyFilter()
+}
 
-	// Update UI based on active filter
+// toggleKindFilter toggles a kind filter (formulae, casks).
+func (s *InputService) toggleKindFilter(kind KindFilter) {
+	s.appService.activeFilter.ToggleKind(kind)
+	s.applyFilter()
+}
+
+// applyFilter refreshes the search label and results after a filter change.
+func (s *InputService) applyFilter() {
 	s.updateFilterUI()
 	s.appService.search(s.layout.GetSearch().Field().GetText(), true)
 }
 
-// updateFilterUI updates the search label and legend based on the current filter state.
+// updateFilterUI updates the search label based on the current filter state.
 func (s *InputService) updateFilterUI() {
-	s.layout.GetLegend().SetLegend(s.legendEntries, "")
+	label := s.appService.activeFilter.Label()
+	switch {
+	case s.appService.IsBrewfileMode() && label != "":
+		label = "Brewfile - " + label
+	case s.appService.IsBrewfileMode():
+		label = "Brewfile"
+	case label == "":
+		label = "All"
+	}
+	s.layout.GetSearch().Field().SetLabel(tview.Escape("Search (" + label + "): "))
+}
 
-	// Map filter types to their display config
-	filterConfig := map[FilterType]struct {
-		suffix  string
-		keySlug string
-	}{
-		FilterInstalled: {"Installed", s.ActionFilterInstalled.KeySlug},
-		FilterOutdated:  {"Outdated", s.ActionFilterOutdated.KeySlug},
-		FilterLeaves:    {"Leaves", s.ActionFilterLeaves.KeySlug},
-		FilterCasks:     {"Casks", s.ActionFilterCasks.KeySlug},
-		FilterFormulae:  {"Formulae", s.ActionFilterFormulae.KeySlug},
+// handleFilterPickerEvent shows a picker to combine a status filter
+// (installed, outdated, leaves) with a kind filter (formulae, casks).
+func (s *InputService) handleFilterPickerEvent() {
+	type option struct {
+		label    string
+		shortcut rune
+		active   func() bool
+		toggle   func()
+	}
+	filter := &s.appService.activeFilter
+	options := []option{
+		{"None", 'n', filter.IsNone, func() { *filter = PackageFilter{} }},
+		{"Installed", 'i', func() bool { return filter.Status == StatusInstalled }, func() { filter.ToggleStatus(StatusInstalled) }},
+		{"Outdated", 'o', func() bool { return filter.Status == StatusOutdated }, func() { filter.ToggleStatus(StatusOutdated) }},
+		{"Leaves", 'l', func() bool { return filter.Status == StatusLeaves }, func() { filter.ToggleStatus(StatusLeaves) }},
+		{"Formulae", 'f', func() bool { return filter.Kind == KindFormulae }, func() { filter.ToggleKind(KindFormulae) }},
+		{"Casks", 'c', func() bool { return filter.Kind == KindCasks }, func() { filter.ToggleKind(KindCasks) }},
 	}
 
-	baseLabel := "Search"
-	if s.appService.IsBrewfileMode() {
-		baseLabel = "Search (Brewfile"
-	}
+	list := tview.NewList().ShowSecondaryText(false)
+	list.SetBorder(true).
+		SetTitle(" Filter (Esc to close) ").
+		SetBorderPadding(0, 0, 1, 1)
 
-	if cfg, exists := filterConfig[s.appService.activeFilter]; exists {
-		if s.appService.IsBrewfileMode() {
-			s.layout.GetSearch().Field().SetLabel(baseLabel + " - " + cfg.suffix + "): ")
-		} else {
-			s.layout.GetSearch().Field().SetLabel("Search (" + cfg.suffix + "): ")
+	refresh := func() {
+		for i, o := range options {
+			mark := "○"
+			if o.active() {
+				mark = "●"
+			}
+			list.SetItemText(i, mark+" "+o.label, "")
 		}
-		s.layout.GetLegend().SetLegend(s.legendEntries, cfg.keySlug)
-		return
 	}
-
-	// No filter active (FilterNone)
-	if s.appService.IsBrewfileMode() {
-		s.layout.GetSearch().Field().SetLabel(baseLabel + "): ")
-	} else {
-		s.layout.GetSearch().Field().SetLabel("Search (All): ")
+	for _, o := range options {
+		toggle := o.toggle
+		list.AddItem(o.label, "", o.shortcut, func() {
+			toggle()
+			refresh()
+			s.applyFilter()
+		})
 	}
+	refresh()
+
+	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyRune && event.Rune() == 'q':
+			s.closeOverlay()
+			return nil
+		case event.Key() == tcell.KeyRune && event.Rune() == 'j', event.Key() == tcell.KeyCtrlN:
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Key() == tcell.KeyRune && event.Rune() == 'k', event.Key() == tcell.KeyCtrlP:
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+
+	const width = 28
+	centered := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(list, len(options)+2, 0, true).
+			AddItem(nil, 0, 1, false),
+			width, 0, true).
+		AddItem(nil, 0, 1, false)
+
+	pages := tview.NewPages().
+		AddPage("main", s.layout.Root(), true, true).
+		AddPage("filter", centered, true, true)
+	s.appService.GetApp().SetRoot(pages, true)
 }
 
-// handleFilterPackagesEvent toggles the filter for installed packages
-func (s *InputService) handleFilterPackagesEvent() {
-	s.handleFilterEvent(FilterInstalled)
-}
-
-// handleFilterOutdatedPackagesEvent toggles the filter for outdated packages
-func (s *InputService) handleFilterOutdatedPackagesEvent() {
-	s.handleFilterEvent(FilterOutdated)
-}
-
-// handleFilterLeavesEvent toggles the filter for leaf packages (installed on request)
-func (s *InputService) handleFilterLeavesEvent() {
-	s.handleFilterEvent(FilterLeaves)
-}
-
-// handleFilterCasksEvent toggles the filter for cask packages only
-func (s *InputService) handleFilterCasksEvent() {
-	s.handleFilterEvent(FilterCasks)
-}
-
-// handleFilterFormulaeEvent toggles the filter for formulae packages only
-func (s *InputService) handleFilterFormulaeEvent() {
-	s.handleFilterEvent(FilterFormulae)
-}
-
-// handleSortEvent cycles through sort modes (Downloads → Name → Installed).
+// handleSortEvent cycles through sort modes (None → Downloads → Name).
 func (s *InputService) handleSortEvent() {
 	newSort := s.appService.CycleSortMode()
 	s.layout.GetNotifier().ShowSuccess(fmt.Sprintf("Sort: %s", newSort))
@@ -426,8 +594,7 @@ func (s *InputService) showModal(text string, confirmFunc func(), cancelFunc fun
 
 // closeModal closes the currently displayed modal dialog and returns focus to the main table view.
 func (s *InputService) closeModal() {
-	s.appService.app.SetRoot(s.layout.Root(), true)
-	s.appService.app.SetFocus(s.layout.GetTable().View())
+	s.closeOverlay()
 }
 
 // handleInstallPackageEvent is called when the user presses the installation key (i).
@@ -548,7 +715,7 @@ func (s *InputService) handleUpdatePackageEvent() {
 	}
 }
 
-// handleUpdateAllPackagesEvent is called when the user presses the update all key (Ctrl+U).
+// handleUpdateAllPackagesEvent is called when the user presses the update all key (U).
 func (s *InputService) handleUpdateAllPackagesEvent() {
 	s.showModal("Are you sure you want to update all Packages?", func() {
 		s.closeModal()

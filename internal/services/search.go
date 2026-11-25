@@ -6,8 +6,9 @@ import (
 	"sort"
 	"strings"
 
+	"bbrew/internal/ui/components"
+
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // search filters the packages based on the search text and the current filter state.
@@ -69,28 +70,15 @@ func (s *AppService) CycleSortMode() models.SortMode {
 	return s.activeSort
 }
 
-// applyFilter filters packages based on the active filter type.
+// applyFilter filters packages based on the active filter.
 func (s *AppService) applyFilter(sourceList *[]models.Package) *[]models.Package {
-	if s.activeFilter == FilterNone {
+	if s.activeFilter.IsNone() {
 		return sourceList
 	}
 
 	filteredSource := &[]models.Package{}
 	for _, info := range *sourceList {
-		include := false
-		switch s.activeFilter {
-		case FilterInstalled:
-			include = info.LocallyInstalled
-		case FilterOutdated:
-			include = info.LocallyInstalled && info.Outdated
-		case FilterLeaves:
-			include = info.LocallyInstalled && info.InstalledOnRequest
-		case FilterCasks:
-			include = info.Type == models.PackageTypeCask
-		case FilterFormulae:
-			include = info.Type == models.PackageTypeFormula
-		}
-		if include {
+		if s.activeFilter.Matches(info) {
 			*filteredSource = append(*filteredSource, info)
 		}
 	}
@@ -133,74 +121,44 @@ func (s *AppService) forceRefreshResults() {
 
 // setResults updates the results table with the provided data and optionally scrolls to the top.
 func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
-	s.layout.GetTable().Clear()
-
-	headers := [5]string{"Type", "Name", "Version", "Description", "Downloads"}
+	sortColumn := -1
 	switch s.activeSort {
 	case models.SortByName:
-		headers[1] += " ▼"
+		sortColumn = components.ColName
 	case models.SortByDownloads:
-		headers[4] += " ▼"
+		sortColumn = components.ColDownloads
 	}
-	s.layout.GetTable().SetTableHeaders(headers[0], headers[1], headers[2], headers[3], headers[4])
 
-	for i, info := range *data {
-		// Type cell with escaped brackets
-		var typeTag string
-		switch info.Type {
-		case models.PackageTypeCask:
-			typeTag = tview.Escape("[C]")
-		case models.PackageTypeFlatpak:
-			typeTag = tview.Escape("[P]")
-		case models.PackageTypeMas:
-			typeTag = tview.Escape("[M]")
-		default:
-			typeTag = tview.Escape("[F]")
-		}
-		typeCell := tview.NewTableCell(typeTag).SetSelectable(true).SetAlign(tview.AlignLeft)
-
-		// Version handling - truncate if too long
-		version := info.Version
-		const maxVersionLen = 15
-		if len(version) > maxVersionLen {
-			version = version[:maxVersionLen-1] + "…"
+	rows := make([]components.Row, 0, len(*data))
+	for _, info := range *data {
+		row := components.Row{
+			Type:         typeLetter(info.Type),
+			Name:         info.Label(),
+			Version:      info.Version,
+			Description:  info.Description,
+			Downloads:    fmt.Sprintf("%d", info.Analytics90dDownloads),
+			NameColor:    tcell.ColorDefault,
+			VersionColor: tcell.ColorDefault,
 		}
 
-		// Name cell with color based on status
-		nameCell := tview.NewTableCell(info.Label()).SetSelectable(true)
+		// Name color based on status, description with warning prefix
 		switch {
 		case info.Disabled:
-			nameCell.SetTextColor(tcell.ColorRed)
+			row.NameColor = tcell.ColorRed
+			row.Description = "[DISABLED] " + row.Description
 		case info.Deprecated:
-			nameCell.SetTextColor(tcell.ColorYellow)
+			row.NameColor = tcell.ColorYellow
+			row.Description = "[DEPRECATED] " + row.Description
 		case info.LocallyInstalled:
-			nameCell.SetTextColor(tcell.ColorGreen)
+			row.NameColor = tcell.ColorGreen
 		}
-
-		// Version cell
-		versionCell := tview.NewTableCell(version).SetSelectable(true)
 		if info.LocallyInstalled && info.Outdated {
-			versionCell.SetTextColor(tcell.ColorOrange)
+			row.VersionColor = tcell.ColorOrange
 		}
 
-		// Description with deprecation/disabled warning prefix
-		desc := info.Description
-		if info.Disabled {
-			desc = "[DISABLED] " + desc
-		} else if info.Deprecated {
-			desc = "[DEPRECATED] " + desc
-		}
-
-		// Downloads cell
-		downloadsCell := tview.NewTableCell(fmt.Sprintf("%d", info.Analytics90dDownloads)).SetSelectable(true).SetAlign(tview.AlignRight)
-
-		// Set cells with new column order: Type, Name, Version, Description, Downloads
-		s.layout.GetTable().View().SetCell(i+1, 0, typeCell.SetExpansion(0))
-		s.layout.GetTable().View().SetCell(i+1, 1, nameCell.SetExpansion(0))
-		s.layout.GetTable().View().SetCell(i+1, 2, versionCell.SetExpansion(0))
-		s.layout.GetTable().View().SetCell(i+1, 3, tview.NewTableCell(desc).SetSelectable(true).SetExpansion(1))
-		s.layout.GetTable().View().SetCell(i+1, 4, downloadsCell.SetExpansion(0))
+		rows = append(rows, row)
 	}
+	s.layout.GetTable().SetRows(rows, sortColumn)
 
 	// Update the details view with the first item in the list
 	if len(*data) > 0 && scrollToTop {
@@ -220,4 +178,18 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 		totalCount = len(*s.brewfilePackages)
 	}
 	s.layout.GetSearch().UpdateCounter(totalCount, len(*s.filteredPackages))
+}
+
+// typeLetter returns the one-letter type indicator for a package type.
+func typeLetter(t models.PackageType) string {
+	switch t {
+	case models.PackageTypeCask:
+		return "C"
+	case models.PackageTypeFlatpak:
+		return "P"
+	case models.PackageTypeMas:
+		return "M"
+	default:
+		return "F"
+	}
 }

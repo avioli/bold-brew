@@ -9,11 +9,27 @@ import (
 	"github.com/rivo/tview"
 )
 
+// HelpKey is one shortcut line in the help screen.
+type HelpKey struct {
+	Keys        string
+	Description string
+}
+
+// HelpSection is a titled group of shortcuts.
+type HelpSection struct {
+	Title string
+	Keys  []HelpKey
+}
+
+const (
+	helpKeyWidth = 22
+	helpBoxWidth = 64
+)
+
 // HelpScreen displays a modal overlay with all keyboard shortcuts
 type HelpScreen struct {
-	pages      *tview.Pages
-	theme      *theme.Theme
-	isBrewfile bool
+	pages *tview.Pages
+	theme *theme.Theme
 }
 
 // NewHelpScreen creates a new help screen component
@@ -29,47 +45,39 @@ func (h *HelpScreen) View() *tview.Pages {
 	return h.pages
 }
 
-// SetBrewfileMode sets whether Brewfile-specific commands should be shown
-func (h *HelpScreen) SetBrewfileMode(enabled bool) {
-	h.isBrewfile = enabled
-}
-
-// Build creates the help screen as an overlay on top of the main content
-func (h *HelpScreen) Build(mainContent tview.Primitive) *tview.Pages {
-	content := h.buildHelpContent()
+// Build creates the help screen as an overlay on top of the main content.
+// The box is at most maxHeight rows high (0 for no limit) and scrolls when
+// the content does not fit. It returns the pages and the scrollable text.
+func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, maxHeight int) (*tview.Pages, *tview.TextView) {
+	content, lines := h.buildHelpContent(sections)
 
 	textView := tview.NewTextView().
 		SetDynamicColors(true).
+		SetScrollable(true).
 		SetText(content).
 		SetTextAlign(tview.AlignLeft)
 
 	textView.SetBackgroundColor(h.theme.ModalBgColor)
 	textView.SetTextColor(h.theme.DefaultTextColor)
-
-	// Create a frame around the text
-	frame := tview.NewFrame(textView).
-		SetBorders(1, 1, 1, 1, 2, 2)
-	frame.SetBackgroundColor(h.theme.ModalBgColor)
-	frame.SetBorderColor(h.theme.BorderColor)
-	frame.SetBorder(true).
+	textView.SetBorder(true).
+		SetBorderPadding(0, 0, 2, 2).
+		SetBorderColor(h.theme.BorderColor).
 		SetTitle(" Help ").
 		SetTitleAlign(tview.AlignCenter)
 
-	// Calculate box dimensions
-	boxHeight := 23
-	boxWidth := 55
-	if h.isBrewfile {
-		boxHeight = 27 // Extra space for Brewfile section
+	boxHeight := lines + 2 // borders
+	if maxHeight > 0 {
+		boxHeight = min(boxHeight, maxHeight)
 	}
 
-	// Center the frame in a flex layout
+	// Center the box in a flex layout
 	centered := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(frame, boxHeight, 0, true).
+			AddItem(textView, boxHeight, 0, true).
 			AddItem(nil, 0, 1, false),
-			boxWidth, 0, true).
+			helpBoxWidth, 0, true).
 		AddItem(nil, 0, 1, false)
 
 	// Create pages with main content as background and help as overlay
@@ -77,62 +85,47 @@ func (h *HelpScreen) Build(mainContent tview.Primitive) *tview.Pages {
 		AddPage("main", mainContent, true, true).
 		AddPage("help", centered, true, true)
 
-	return h.pages
+	return h.pages, textView
 }
 
-// buildHelpContent generates the formatted help text
-func (h *HelpScreen) buildHelpContent() string {
+// buildHelpContent generates the formatted help text and its line count.
+func (h *HelpScreen) buildHelpContent(sections []HelpSection) (string, int) {
 	var sb strings.Builder
+	lines := 0
 
-	// Navigation section
-	sb.WriteString(h.formatSection("NAVIGATION"))
-	sb.WriteString(h.formatKey("↑/↓, j/k", "Navigate list"))
-	sb.WriteString(h.formatKey("/", "Focus search"))
-	sb.WriteString(h.formatKey("Esc", "Back to table"))
-	sb.WriteString(h.formatKey("q", "Quit"))
-	sb.WriteString("\n")
-
-	// Filters section
-	sb.WriteString(h.formatSection("FILTERS"))
-	sb.WriteString(h.formatKey("f", "Toggle installed"))
-	sb.WriteString(h.formatKey("o", "Toggle outdated"))
-	sb.WriteString(h.formatKey("l", "Toggle leaves"))
-	sb.WriteString(h.formatKey("c", "Toggle casks"))
-	sb.WriteString(h.formatKey("F", "Toggle formulae"))
-	sb.WriteString(h.formatKey("s", "Cycle sort mode"))
-	sb.WriteString("\n")
-
-	// Actions section
-	sb.WriteString(h.formatSection("ACTIONS"))
-	sb.WriteString(h.formatKey("i", "Install selected"))
-	sb.WriteString(h.formatKey("u", "Update selected"))
-	sb.WriteString(h.formatKey("r", "Remove selected"))
-	sb.WriteString(h.formatKey("v", "Vulnerability scan"))
-	sb.WriteString(h.formatKey("e", "Export Brewfile"))
-	sb.WriteString(h.formatKey("Ctrl+U", "Update all"))
-
-	// Brewfile section (only if in Brewfile mode)
-	if h.isBrewfile {
+	for _, section := range sections {
+		sb.WriteString(h.formatSection(section.Title))
+		lines++
+		for _, k := range section.Keys {
+			sb.WriteString(h.formatKey(k.Keys, k.Description))
+			lines++
+		}
 		sb.WriteString("\n")
-		sb.WriteString(h.formatSection("BREWFILE"))
-		sb.WriteString(h.formatKey("Ctrl+A", "Install all"))
-		sb.WriteString(h.formatKey("Ctrl+R", "Remove all"))
+		lines++
 	}
 
-	sb.WriteString("\n")
-	fmt.Fprintf(&sb, "[%s]Press any key to close[-]", h.getColorTag(h.theme.LegendColor))
+	fmt.Fprintf(&sb, "[%s]j/k to scroll, any other key to close[-]", h.getColorTag(h.theme.LegendColor))
+	lines++
 
-	return sb.String()
+	return sb.String(), lines
 }
 
 // formatSection formats a section header
 func (h *HelpScreen) formatSection(title string) string {
-	return fmt.Sprintf("[%s::b]%s[-:-:-]\n", h.getColorTag(h.theme.SuccessColor), title)
+	return fmt.Sprintf("[%s::b]%s[-:-:-]\n", h.getColorTag(h.theme.SuccessColor), tview.Escape(title))
 }
 
 // formatKey formats a key-description pair
 func (h *HelpScreen) formatKey(key, description string) string {
-	return fmt.Sprintf("  [%s]%-12s[-] %s\n", h.getColorTag(h.theme.WarningColor), key, description)
+	return fmt.Sprintf("  [%s]%s[-] %s\n", h.getColorTag(h.theme.WarningColor),
+		tview.Escape(padRight(key, helpKeyWidth)), tview.Escape(description))
+}
+
+func padRight(s string, width int) string {
+	if pad := width - tview.TaggedStringWidth(tview.Escape(s)); pad > 0 {
+		return s + strings.Repeat(" ", pad)
+	}
+	return s
 }
 
 // getColorTag converts a tcell.Color to a tview color tag

@@ -12,6 +12,13 @@ import (
 	"golang.org/x/text/message"
 )
 
+// DetailsPadding is the horizontal padding on each side of the details text.
+const DetailsPadding = 1
+
+// DetailsMinWidth is the minimum total width of the details panel: 34 columns
+// of content, padding on both sides and the left border.
+const DetailsMinWidth = 34 + 2*DetailsPadding + 1
+
 type Details struct {
 	view  *tview.TextView
 	theme *theme.Theme
@@ -26,18 +33,22 @@ func NewDetails(theme *theme.Theme) *Details {
 	details.view.SetDynamicColors(true)
 	details.view.SetTextAlign(tview.AlignLeft)
 	details.view.SetBorder(false)
-	details.view.SetBorderPadding(0, 0, 3, 1)
 	details.view.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
 		titleStyle := tcell.StyleDefault.Foreground(theme.TitleColor)
+		if details.view.HasFocus() {
+			borderStyle = tcell.StyleDefault.Foreground(theme.TitleColor)
+			titleStyle = titleStyle.Reverse(true)
+		}
 		for row := y; row < y+height; row++ {
 			screen.SetContent(x, row, tview.Borders.Vertical, nil, borderStyle)
 		}
-		title := "Details"
+		title := " Details "
 		for i, ch := range title {
-			screen.SetContent(x+2+i, y, ch, nil, titleStyle)
+			screen.SetContent(x+1+i, y, ch, nil, titleStyle)
 		}
-		return x + 3, y + 2, width - 3, height - 2
+		// Left border, then one column of padding on each side.
+		return x + 1 + DetailsPadding, y + 2, width - 1 - 2*DetailsPadding, height - 2
 	})
 	return details
 }
