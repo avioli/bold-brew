@@ -56,6 +56,7 @@ type InputService struct {
 
 	// Actions for each key input
 	ActionSearch        *InputAction
+	ActionGoMenu        *InputAction
 	ActionFilterPicker  *InputAction
 	ActionSort          *InputAction
 	ActionExport        *InputAction
@@ -88,6 +89,9 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.ActionSearch = &InputAction{
 		Key: tcell.KeyRune, Rune: '/', KeySlug: "/", Name: "Focus search",
 		Action: s.handleSearchFieldEvent,
+	}
+	s.ActionGoMenu = &InputAction{
+		Key: tcell.KeyRune, Rune: 'g', Action: s.handleGoMenuEvent,
 	}
 	s.ActionFilterPicker = &InputAction{
 		Key: tcell.KeyRune, Rune: 'f', KeySlug: "f", Name: "Filter picker", Section: sectionFilters,
@@ -158,7 +162,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 
 	// InstallAll/RemoveAll are added in Brewfile mode
 	s.keyActions = []*InputAction{
-		s.ActionSearch, s.ActionFilterPicker, s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
+		s.ActionSearch, s.ActionGoMenu, s.ActionFilterPicker, s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
 		s.ActionUpdateAll, s.ActionVulnScan, s.ActionExport,
 		s.ActionToggleBorders, s.ActionToggleDetails, s.ActionNextPanel, s.ActionPrevPanel,
 		s.ActionShowDetails, s.ActionHelp, s.ActionBack, s.ActionQuit,
@@ -380,7 +384,7 @@ func (s *InputService) helpSections() []components.HelpSection {
 	sections := []components.HelpSection{
 		{Title: "NAVIGATION", Keys: []components.HelpKey{
 			{Keys: "↑/↓, j/k, Ctrl+N/P", Description: "Move down/up"},
-			{Keys: "g/G, Home/End", Description: "Go to top/bottom"},
+			{Keys: "gg/G, Home/End", Description: "Go to top/bottom"},
 			{Keys: "Alt+< / Alt+>", Description: "Go to top/bottom"},
 			{Keys: "←/→, h/l", Description: "Scroll columns (Type and Name stay)"},
 			{Keys: "Ctrl+D/U", Description: "Half page down/up"},
@@ -394,6 +398,8 @@ func (s *InputService) helpSections() []components.HelpSection {
 			{Keys: "?", Description: "This help"},
 		}},
 	}
+
+	sections = append(sections, s.goMenuHelp())
 
 	for _, title := range []string{sectionFilters, sectionActions, sectionBrewfile, sectionView} {
 		section := components.HelpSection{Title: title}

@@ -114,7 +114,7 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 |-----|--------|
 | `/` | Search packages |
 | `Up/Down`, `j/k`, `Ctrl+N/P` | Move down/up |
-| `g/G`, `Home/End`, `Alt+<`/`Alt+>` | Go to top/bottom |
+| `gg`/`G`, `Home/End`, `Alt+<`/`Alt+>` | Go to top/bottom |
 | `Left/Right`, `h/l` | Scroll the Version, Description and Downloads columns when they do not all fit (Type and Name stay) |
 | `Ctrl+D/U` | Half page down/up |
 | `Ctrl+F/B`, `PgDn/PgUp`, `Ctrl+V`/`Alt+V` | Page down/up |
@@ -123,6 +123,15 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | `Esc` | Back to table; quit from the table |
 | `?` | Help screen |
 | `q` | Quit |
+
+### Go Menu (`g`)
+
+| Key | Action |
+|-----|--------|
+| `gg` | Go to top |
+| `gh` | Open the homepage (`brew home`) |
+| `gs` | Open the source repository (`brew source`, formulae, Homebrew 7+) |
+| `gi` | Show `brew info` in the Log |
 
 ### Filters and Sorting
 
