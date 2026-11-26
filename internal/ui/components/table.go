@@ -51,8 +51,9 @@ type Table struct {
 	// Natural (uncapped by available space) widths, computed from all rows.
 	nameWidth, versionWidth, downloadsWidth int
 
-	compactType   bool
-	showDownloads bool
+	compactType     bool
+	showDownloads   bool
+	showDescription bool
 
 	lastWidth int
 	dirty     bool
@@ -74,9 +75,10 @@ func (f *fitTable) Draw(screen tcell.Screen) {
 
 func NewTable(theme *theme.Theme) *Table {
 	table := &Table{
-		theme:         theme,
-		sortColumn:    -1,
-		showDownloads: true,
+		theme:           theme,
+		sortColumn:      -1,
+		showDownloads:   true,
+		showDescription: true,
 	}
 	table.view = &fitTable{Table: tview.NewTable(), owner: table}
 
@@ -120,6 +122,14 @@ func (t *Table) Clear() {
 func (t *Table) SetCompactType(compact bool) {
 	if t.compactType != compact {
 		t.compactType = compact
+		t.dirty = true
+	}
+}
+
+// SetShowDescription shows or hides the Description column.
+func (t *Table) SetShowDescription(show bool) {
+	if t.showDescription != show {
+		t.showDescription = show
 		t.dirty = true
 	}
 }
@@ -174,48 +184,57 @@ func (t *Table) render(width int) {
 		typeHeader, typeWidth = "T", 1
 	}
 
+	// Logical columns (indexed by Col*) and their widths.
 	headers := []string{
 		typeHeader,
 		t.header(ColName, "Name"),
 		t.header(ColVersion, "Version"),
 		t.header(ColDescription, "Description"),
+		t.header(ColDownloads, "Downloads"),
 	}
-	if t.showDownloads {
-		headers = append(headers, t.header(ColDownloads, "Downloads"))
-	}
-
 	widths := []int{
 		typeWidth,
 		max(t.nameWidth, tview.TaggedStringWidth(headers[ColName])),
 		max(t.versionWidth, tview.TaggedStringWidth(headers[ColVersion])),
 		0, // description, computed below
+		max(t.downloadsWidth, tview.TaggedStringWidth(headers[ColDownloads])),
+	}
+
+	visible := []int{ColType, ColName, ColVersion}
+	if t.showDescription {
+		visible = append(visible, ColDescription)
 	}
 	if t.showDownloads {
-		widths = append(widths, max(t.downloadsWidth, tview.TaggedStringWidth(headers[ColDownloads])))
+		visible = append(visible, ColDownloads)
 	}
 
 	// Space left for Name and Description; tview reserves one column of
 	// separator after every column.
 	avail := width
-	for i, w := range widths {
-		if i != ColName && i != ColDescription {
-			avail -= w + 1
+	for _, col := range visible {
+		avail-- // separator
+		if col != ColName && col != ColDescription {
+			avail -= widths[col]
 		}
 	}
-	avail -= 2 // separators after Name and Description
 
-	// Description absorbs the pressure first. Once it is down to its
-	// minimum, Name gives up space (truncated with an ellipsis) rather than
-	// pushing Version and Downloads off the panel.
-	widths[ColName] = min(widths[ColName], max(avail-minDescWidth, minNameWidth))
-	widths[ColDescription] = max(avail-widths[ColName], 1)
+	if t.showDescription {
+		// Description absorbs the pressure first. Once it is down to its
+		// minimum, Name gives up space (truncated with an ellipsis) rather
+		// than pushing Version and Downloads off the panel.
+		widths[ColName] = min(widths[ColName], max(avail-minDescWidth, minNameWidth))
+		widths[ColDescription] = max(avail-widths[ColName], 1)
+	} else {
+		widths[ColName] = min(widths[ColName], max(avail, minNameWidth))
+	}
 
 	view := t.view.Table
 	view.Clear()
 
 	// Header cells are padded to the full column width, data cells are capped
 	// at it, so every column has a stable width regardless of scrolling.
-	for col, h := range headers {
+	for pos, col := range visible {
+		h := headers[col]
 		text := h
 		pad := widths[col] - tview.TaggedStringWidth(h)
 		if pad > 0 {
@@ -225,7 +244,7 @@ func (t *Table) render(width int) {
 				text = h + strings.Repeat(" ", pad)
 			}
 		}
-		view.SetCell(0, col, &tview.TableCell{
+		view.SetCell(0, pos, &tview.TableCell{
 			Text:            text,
 			NotSelectable:   true,
 			Align:           tview.AlignLeft,
@@ -241,13 +260,21 @@ func (t *Table) render(width int) {
 		if !t.compactType {
 			typeText = "[" + r.Type + "]"
 		}
-		view.SetCell(row, ColType, t.cell(typeText, widths[ColType], tcell.ColorDefault))
-		view.SetCell(row, ColName, t.cell(r.Name, widths[ColName], r.NameColor))
-		view.SetCell(row, ColVersion, t.cell(r.Version, widths[ColVersion], r.VersionColor))
-		view.SetCell(row, ColDescription, t.cell(r.Description, widths[ColDescription], tcell.ColorDefault))
-		if t.showDownloads {
-			view.SetCell(row, ColDownloads, t.cell(r.Downloads, widths[ColDownloads], tcell.ColorDefault).
-				SetAlign(tview.AlignRight))
+		for pos, col := range visible {
+			var c *tview.TableCell
+			switch col {
+			case ColType:
+				c = t.cell(typeText, widths[col], tcell.ColorDefault)
+			case ColName:
+				c = t.cell(r.Name, widths[col], r.NameColor)
+			case ColVersion:
+				c = t.cell(r.Version, widths[col], r.VersionColor)
+			case ColDescription:
+				c = t.cell(r.Description, widths[col], tcell.ColorDefault)
+			case ColDownloads:
+				c = t.cell(r.Downloads, widths[col], tcell.ColorDefault).SetAlign(tview.AlignRight)
+			}
+			view.SetCell(row, pos, c)
 		}
 	}
 }

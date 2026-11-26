@@ -14,6 +14,7 @@ const (
 	HideDownloadsWidth = 146 // hide the Downloads column
 	CompactPadWidth    = 120 // shrink frame padding, short counter label
 	CompactTypeWidth   = 100 // Type column becomes "T" with "F"/"C"
+	HideDescWidth      = 99  // hide the Description column (below 100)
 	NoBordersWidth     = 90  // drop the outer and row borders
 	HideDetailsWidth   = 80  // hide the details panel
 )
@@ -190,6 +191,7 @@ func (l *Layout) Resize(width, height int) {
 	l.search.SetCompact(width <= CompactPadWidth)
 	l.table.SetCompactType(width <= CompactTypeWidth)
 	l.table.SetShowDownloads(width > HideDownloadsWidth)
+	l.table.SetShowDescription(width > HideDescWidth)
 }
 
 func (l *Layout) DetailsVisible() bool { return l.detailsShown }
