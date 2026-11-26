@@ -509,32 +509,60 @@ func (s *InputService) handleFilterPickerEvent() {
 		{"Casks", 'c', func() bool { return filter.Kind == KindCasks }, func() { filter.ToggleKind(KindCasks) }},
 	}
 
-	keys := make([]rune, len(options))
-	for i, o := range options {
-		keys[i] = o.shortcut
+	// List rows: the options, with separators after None and before
+	// Formulae (status filters in between, kind filters after).
+	const separator = -1
+	rows := []int{0, separator, 1, 2, 3, separator, 4, 5} // option index per row
+	keys := make([]rune, len(rows))
+	for r, o := range rows {
+		if o != separator {
+			keys[r] = options[o].shortcut
+		}
 	}
 
 	var list *tview.List
 	refresh := func() {
-		for i, o := range options {
+		for r, o := range rows {
+			if o == separator {
+				list.SetItemText(r, "[::d]────────────────────[::-]", "")
+				continue
+			}
 			mark := "○"
-			if o.active() {
+			if options[o].active() {
 				mark = "●"
 			}
-			list.SetItemText(i, mark+" "+s.menuLabel(o.shortcut, o.label), "")
+			list.SetItemText(r, mark+" "+s.menuLabel(options[o].shortcut, options[o].label), "")
 		}
 	}
 	// Toggling keeps the picker open, so filters can be combined.
-	toggle := func(i int) {
-		options[i].toggle()
+	toggle := func(r int) {
+		if rows[r] == separator {
+			return
+		}
+		options[rows[r]].toggle()
 		refresh()
 		s.applyFilter()
 	}
 	list = s.newMenuList(" Filter (Esc to close) ", keys, toggle)
-	for i := range options {
-		list.AddItem("", "", 0, func() { toggle(i) })
+	for r := range rows {
+		list.AddItem("", "", 0, func() { toggle(r) })
 	}
 	refresh()
+
+	// Skip separators, continuing in the direction the cursor moved.
+	prev := 0
+	list.SetChangedFunc(func(r int, _, _ string, _ rune) {
+		if rows[r] == separator {
+			dir := 1
+			if r < prev {
+				dir = -1
+			}
+			prev = r + dir
+			list.SetCurrentItem(r + dir)
+			return
+		}
+		prev = r
+	})
 
 	s.showOverlay("filter", list, 28)
 }
