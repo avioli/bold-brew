@@ -4,6 +4,7 @@ import (
 	"bbrew/internal/models"
 	"bbrew/internal/ui/theme"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -11,6 +12,9 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
+
+// noColorLabel matches a "[blue]• Label:[-:-:-]" bullet label.
+var noColorLabel = regexp.MustCompile(`\[blue\](• [^\[]*?:)\[-:-:-\]`)
 
 // DetailsPadding is the horizontal padding on each side of the details text.
 const DetailsPadding = 1
@@ -73,20 +77,20 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 	}
 
 	// Installation status with colors
-	installedStatus := "[red]Not installed[-]"
+	installedStatus := "[red]Not installed[-:-:-]"
 	if pkg.LocallyInstalled {
-		installedStatus = "[green]Installed[-]"
+		installedStatus = "[green]Installed[-:-:-]"
 		if pkg.Outdated {
-			installedStatus = "[orange]Update available[-]"
+			installedStatus = "[orange]Update available[-:-:-]"
 		}
 	}
 
 	// Health warning inline (shown next to status)
 	healthInline := ""
 	if pkg.Disabled {
-		healthInline = " [red::b]⚠ DISABLED[-]"
+		healthInline = " [red]⚠ DISABLED[-:-:-]"
 	} else if pkg.Deprecated {
-		healthInline = " [yellow::b]⚠ DEPRECATED[-]"
+		healthInline = " [yellow]⚠ DEPRECATED[-:-:-]"
 	}
 
 	// Type tag with escaped brackets
@@ -107,7 +111,7 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 	}
 
 	// Section separator
-	separator := "[dim]────────────────────────[-]"
+	separator := "[dim]────────────────────────[-:-:-]"
 
 	// Basic information with status
 	nameLabel := "Name"
@@ -124,7 +128,7 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 		}
 		license, tap = f.License, f.Tap
 		if f.Pinned {
-			extraStatus += ", [blue]pinned[-]"
+			extraStatus += ", [blue]pinned[-:-:-]"
 		}
 		if f.KegOnly {
 			extraStatus += ", keg-only"
@@ -137,15 +141,15 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 	}
 
 	basicInfo := fmt.Sprintf(
-		"[yellow::b]%s[-]\n%s\n"+
-			"[blue]• Type:[-] %s %s\n"+
-			"[blue]• %s:[-] %s\n"+
-			"[blue]• Display Name:[-] %s\n"+
-			"[blue]• Version:[-] %s\n"+
-			"[blue]• Status:[-] %s%s%s\n"+
+		"[yellow::b]%s[-:-:-]\n%s\n"+
+			"[blue]• Type:[-:-:-] %s %s\n"+
+			"[blue]• %s:[-:-:-] %s\n"+
+			"[blue]• Display Name:[-:-:-] %s\n"+
+			"[blue]• Version:[-:-:-] %s\n"+
+			"[blue]• Status:[-:-:-] %s%s%s\n"+
 			"%s%s%s"+
-			"[blue]• Homepage:[-] %s\n\n"+
-			"[yellow::b]Description[-]\n%s\n%s",
+			"[blue]• Homepage:[-:-:-] %s\n\n"+
+			"[yellow::b]Description[-:-:-]\n%s\n%s",
 		tview.Escape(pkg.Label()), separator,
 		typeTag, typeLabel,
 		nameLabel, tview.Escape(pkg.Name),
@@ -181,7 +185,12 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 	}
 	parts = nonEmpty
 
-	d.view.SetText(strings.Join(parts, "\n\n"))
+	text := strings.Join(parts, "\n\n")
+	if theme.NoColor() {
+		// Without colour, labels ("• Version:") are bold; values stay normal.
+		text = noColorLabel.ReplaceAllString(text, "[::b]$1[::-]")
+	}
+	d.view.SetText(text)
 }
 
 func (d *Details) getHealthInfo(pkg *models.Package) string {
@@ -189,12 +198,12 @@ func (d *Details) getHealthInfo(pkg *models.Package) string {
 		return ""
 	}
 
-	separator := "[dim]────────────────────────[-]"
+	separator := "[dim]────────────────────────[-:-:-]"
 
 	var title, reason, date, replacement string
 
 	if pkg.Disabled {
-		title = "[red::b]⚠ Package Disabled[-]"
+		title = "[red::b]⚠ Package Disabled[-:-:-]"
 		if pkg.Formula != nil {
 			reason = interfaceToString(pkg.Formula.DisableReason)
 			date = interfaceToString(pkg.Formula.DisableDate)
@@ -204,7 +213,7 @@ func (d *Details) getHealthInfo(pkg *models.Package) string {
 			date = interfaceToString(pkg.Cask.DisableDate)
 		}
 	} else {
-		title = "[yellow::b]⚠ Package Deprecated[-]"
+		title = "[yellow::b]⚠ Package Deprecated[-:-:-]"
 		if pkg.Formula != nil {
 			reason = interfaceToString(pkg.Formula.DeprecationReason)
 			date = interfaceToString(pkg.Formula.DeprecationDate)
@@ -219,19 +228,19 @@ func (d *Details) getHealthInfo(pkg *models.Package) string {
 	fmt.Fprintf(&sb, "%s\n%s\n", title, separator)
 
 	if reason != "" {
-		fmt.Fprintf(&sb, "[blue]• Reason:[-] %s\n", reason)
+		fmt.Fprintf(&sb, "[blue]• Reason:[-:-:-] %s\n", reason)
 	}
 	if date != "" {
-		fmt.Fprintf(&sb, "[blue]• Since:[-] %s\n", date)
+		fmt.Fprintf(&sb, "[blue]• Since:[-:-:-] %s\n", date)
 	}
 	if replacement != "" {
-		fmt.Fprintf(&sb, "[blue]• Replacement:[-] [green]%s[-]\n", replacement)
+		fmt.Fprintf(&sb, "[blue]• Replacement:[-:-:-] [green]%s[-:-:-]\n", replacement)
 	}
 
 	if pkg.Disabled {
-		sb.WriteString("\n[dim]This package can no longer be installed.[-]")
+		sb.WriteString("\n[dim]This package can no longer be installed.[-:-:-]")
 	} else {
-		sb.WriteString("\n[dim]Consider migrating to the replacement before this package is removed.[-]")
+		sb.WriteString("\n[dim]Consider migrating to the replacement before this package is removed.[-:-:-]")
 	}
 
 	return sb.String()
@@ -245,10 +254,10 @@ func interfaceToString(v interface{}) string {
 }
 
 func (d *Details) getPackageInstallationDetails(pkg *models.Package) string {
-	separator := "[dim]────────────────────────[-]"
+	separator := "[dim]────────────────────────[-:-:-]"
 
 	if !pkg.LocallyInstalled {
-		return fmt.Sprintf("[yellow::b]Installation[-]\n%s\nNot installed", separator)
+		return fmt.Sprintf("[yellow::b]Installation[-:-:-]\n%s\nNot installed", separator)
 	}
 
 	// For formulae, show detailed installation info
@@ -276,11 +285,11 @@ func (d *Details) getPackageInstallationDetails(pkg *models.Package) string {
 		}
 
 		return fmt.Sprintf(
-			"[yellow::b]Installation Details[-]\n%s\n"+
-				"[blue]• Path:[-] %s\n"+
-				"[blue]• Installed on request:[-] %s\n"+
-				"[blue]• Installed as dependency:[-] %s\n"+
-				"[blue]• Installed version:[-] %s\n%s",
+			"[yellow::b]Installation Details[-:-:-]\n%s\n"+
+				"[blue]• Path:[-:-:-] %s\n"+
+				"[blue]• Installed on request:[-:-:-] %s\n"+
+				"[blue]• Installed as dependency:[-:-:-] %s\n"+
+				"[blue]• Installed version:[-:-:-] %s\n%s",
 			separator,
 			packagePrefix,
 			installedOnRequest,
@@ -303,26 +312,26 @@ func (d *Details) getPackageInstallationDetails(pkg *models.Package) string {
 		}
 
 		return fmt.Sprintf(
-			"[yellow::b]Installation Details[-]\n%s\n"+
-				"[blue]• Type:[-] Desktop Application\n"+
-				"[blue]• Installed version:[-] %s%s",
+			"[yellow::b]Installation Details[-:-:-]\n%s\n"+
+				"[blue]• Type:[-:-:-] Desktop Application\n"+
+				"[blue]• Installed version:[-:-:-] %s%s",
 			separator,
 			installedVersion,
 			strings.TrimSuffix("\n"+installedOn, "\n"),
 		)
 	}
 
-	return fmt.Sprintf("[yellow::b]Installation[-]\n%s\nInstalled", separator)
+	return fmt.Sprintf("[yellow::b]Installation[-:-:-]\n%s\nInstalled", separator)
 }
 
 func (d *Details) getAnalyticsInfo(pkg *models.Package) string {
-	separator := "[dim]────────────────────────[-]"
+	separator := "[dim]────────────────────────[-:-:-]"
 	p := message.NewPrinter(language.English)
 
 	return fmt.Sprintf(
-		"[yellow::b]Analytics[-]\n%s\n"+
-			"[blue]• 90d Global Rank:[-] %s\n"+
-			"[blue]• 90d Downloads:[-] %s",
+		"[yellow::b]Analytics[-:-:-]\n%s\n"+
+			"[blue]• 90d Global Rank:[-:-:-] %s\n"+
+			"[blue]• 90d Downloads:[-:-:-] %s",
 		separator,
 		p.Sprintf("%d", pkg.Analytics90dRank),
 		p.Sprintf("%d", pkg.Analytics90dDownloads),
@@ -334,10 +343,10 @@ func (d *Details) getVulnInfo(vulns []models.Vulnerability) string {
 		return ""
 	}
 
-	separator := "[dim]────────────────────────[-]"
+	separator := "[dim]────────────────────────[-:-:-]"
 
 	if len(vulns) == 0 {
-		return fmt.Sprintf("[yellow::b]Security[-]\n%s\n[green]✓ No known vulnerabilities[-]", separator)
+		return fmt.Sprintf("[yellow::b]Security[-:-:-]\n%s\n[green]✓ No known vulnerabilities[-:-:-]", separator)
 	}
 
 	var sb strings.Builder
@@ -347,13 +356,13 @@ func (d *Details) getVulnInfo(vulns []models.Vulnerability) string {
 	} else {
 		sb.WriteString("ies")
 	}
-	fmt.Fprintf(&sb, ")[-]\n%s\n", separator)
+	fmt.Fprintf(&sb, ")[-:-:-]\n%s\n", separator)
 
 	for _, v := range vulns {
 		sevColor := vulnSeverityColor(v.Severity)
-		fmt.Fprintf(&sb, "  [%s][%s][-] %s\n", sevColor, v.Severity, v.ID)
+		fmt.Fprintf(&sb, "  [%s][%s][-:-:-] %s\n", sevColor, v.Severity, v.ID)
 		if v.Summary != "" {
-			fmt.Fprintf(&sb, "    [dim]%s[-]\n", v.Summary)
+			fmt.Fprintf(&sb, "    [dim]%s[-:-:-]\n", v.Summary)
 		}
 	}
 
@@ -363,7 +372,7 @@ func (d *Details) getVulnInfo(vulns []models.Vulnerability) string {
 func vulnSeverityColor(severity string) string {
 	switch strings.ToUpper(severity) {
 	case "CRITICAL":
-		return "red::b"
+		return "red"
 	case "HIGH":
 		return "red"
 	case "MEDIUM":

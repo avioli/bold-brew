@@ -10,7 +10,7 @@ import (
 	"bbrew/internal/models"
 )
 
-const detailsSeparator = "[dim]────────────────────────[-]"
+const detailsSeparator = "[dim]────────────────────────[-:-:-]"
 
 // SetRequiredByFunc sets how to find the installed packages that depend on a
 // package, for the "Required By" section.
@@ -23,7 +23,7 @@ func section(title, body string) string {
 	if strings.TrimSpace(body) == "" {
 		return ""
 	}
-	return fmt.Sprintf("[yellow::b]%s[-]\n%s\n%s", title, detailsSeparator, body)
+	return fmt.Sprintf("[yellow::b]%s[-:-:-]\n%s\n%s", title, detailsSeparator, body)
 }
 
 // bullet formats a "• Label: value" line, or "" when value is empty.
@@ -31,7 +31,7 @@ func bullet(label, value string) string {
 	if value == "" {
 		return ""
 	}
-	return fmt.Sprintf("[blue]• %s:[-] %s\n", label, value)
+	return fmt.Sprintf("[blue]• %s:[-:-:-] %s\n", label, value)
 }
 
 // strings converts a JSON list of strings (decoded as []interface{}).
@@ -100,7 +100,7 @@ func (d *Details) dependenciesSection(pkg *models.Package) string {
 	var sb strings.Builder
 	add := func(label string, names []string) {
 		if len(names) > 0 {
-			fmt.Fprintf(&sb, "[blue]• %s:[-]\n%s\n", label, joinNames(names))
+			fmt.Fprintf(&sb, "[blue]• %s:[-:-:-]\n%s\n", label, joinNames(names))
 		}
 	}
 
