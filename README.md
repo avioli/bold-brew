@@ -64,7 +64,7 @@ Fast search across 15,000+ packages. Filter by installed, outdated, or leaves, c
 Load Brewfiles from local paths or remote URLs. Batch install/remove entire collections. Export your installed packages to a `~/Brewfile` with one keystroke. Supports `brew`, `cask`, `tap`, `mas`, and `flatpak` entries.
 
 ### Security and Health
-On-demand **vulnerability scanning** via `brew vulns` (press `v`). Deprecated and disabled package warnings with replacement suggestions. Full Homebrew 6.0 compatibility including tap trust and ask mode.
+On-demand **vulnerability scanning** via `brew vulns` (press `a` then `v`). Deprecated and disabled package warnings with replacement suggestions. Full Homebrew 6.0 compatibility including tap trust and ask mode.
 
 ---
 
@@ -146,16 +146,21 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | `f` | Filter picker: combine Installed/Outdated/Leaves with Formulae/Casks |
 | `s` | Cycle sort (None, Downloads, Name) |
 
-### Package Operations
+### Actions Menu (`a`)
 
 | Key | Action |
 |-----|--------|
-| `i` | Install selected |
-| `u` | Update selected |
-| `r` | Remove selected |
-| `U` | Update all outdated |
-| `v` | Vulnerability scan |
-| `e` | Export to ~/Brewfile |
+| `ai` | Install selected |
+| `au` | Update selected |
+| `ar` | Remove selected |
+| `aI` | Reinstall selected |
+| `aU` | Update all outdated |
+| `aF` | Fetch (download without installing) |
+| `ap` / `aP` | Pin / unpin a formula (pinned formulae are skipped by Update all) |
+| `al` / `aL` | Link / unlink a formula |
+| `as` / `aS` / `aT` | Start / stop / restart a formula's service (`brew services`) |
+| `av` | Vulnerability scan |
+| `ae` | Export installed packages to ~/Brewfile |
 
 ### Brewfile Mode
 
@@ -203,7 +208,7 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 
 ## Security
 
-- **`brew vulns`** — On-demand CVE scanning for installed packages (press `v` in the TUI)
+- **`brew vulns`** — On-demand CVE scanning for installed packages (press `a` then `v` in the TUI)
 - **govulncheck** — Go dependency vulnerability scanning in CI
 - **gosec** — Static security analysis in CI
 - **Gated releases** — Tests + lint must pass before any release is published

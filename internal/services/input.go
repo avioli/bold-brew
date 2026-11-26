@@ -15,7 +15,6 @@ import (
 // Help screen sections, in display order.
 const (
 	sectionFilters  = "FILTERS"
-	sectionActions  = "ACTIONS"
 	sectionBrewfile = "BREWFILE"
 	sectionView     = "VIEW"
 )
@@ -57,14 +56,9 @@ type InputService struct {
 	// Actions for each key input
 	ActionSearch        *InputAction
 	ActionGoMenu        *InputAction
+	ActionMenu          *InputAction
 	ActionFilterPicker  *InputAction
 	ActionSort          *InputAction
-	ActionExport        *InputAction
-	ActionVulnScan      *InputAction
-	ActionInstall       *InputAction
-	ActionUpdate        *InputAction
-	ActionRemove        *InputAction
-	ActionUpdateAll     *InputAction
 	ActionInstallAll    *InputAction
 	ActionRemoveAll     *InputAction
 	ActionToggleBorders *InputAction
@@ -93,6 +87,9 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.ActionGoMenu = &InputAction{
 		Key: tcell.KeyRune, Rune: 'g', Action: s.handleGoMenuEvent,
 	}
+	s.ActionMenu = &InputAction{
+		Key: tcell.KeyRune, Rune: 'a', Action: s.handleActionMenuEvent,
+	}
 	s.ActionFilterPicker = &InputAction{
 		Key: tcell.KeyRune, Rune: 'f', KeySlug: "f", Name: "Filter picker", Section: sectionFilters,
 		Action: s.handleFilterPickerEvent,
@@ -100,30 +97,6 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.ActionSort = &InputAction{
 		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Cycle sort (none, downloads, name)", Section: sectionFilters,
 		Action: s.handleSortEvent,
-	}
-	s.ActionInstall = &InputAction{
-		Key: tcell.KeyRune, Rune: 'i', KeySlug: "i", Name: "Install selected", Section: sectionActions,
-		Action: s.handleInstallPackageEvent,
-	}
-	s.ActionUpdate = &InputAction{
-		Key: tcell.KeyRune, Rune: 'u', KeySlug: "u", Name: "Update selected", Section: sectionActions,
-		Action: s.handleUpdatePackageEvent,
-	}
-	s.ActionRemove = &InputAction{
-		Key: tcell.KeyRune, Rune: 'r', KeySlug: "r", Name: "Remove selected", Section: sectionActions,
-		Action: s.handleRemovePackageEvent,
-	}
-	s.ActionUpdateAll = &InputAction{
-		Key: tcell.KeyRune, Rune: 'U', KeySlug: "U", Name: "Update all outdated", Section: sectionActions,
-		Action: s.handleUpdateAllPackagesEvent,
-	}
-	s.ActionVulnScan = &InputAction{
-		Key: tcell.KeyRune, Rune: 'v', KeySlug: "v", Name: "Vulnerability scan", Section: sectionActions,
-		Action: s.handleVulnScanEvent,
-	}
-	s.ActionExport = &InputAction{
-		Key: tcell.KeyRune, Rune: 'e', KeySlug: "e", Name: "Export to ~/Brewfile", Section: sectionActions,
-		Action: s.handleExportEvent,
 	}
 	s.ActionInstallAll = &InputAction{
 		Key: tcell.KeyCtrlA, KeySlug: "Ctrl+A", Name: "Install all from Brewfile", Section: sectionBrewfile,
@@ -162,8 +135,8 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 
 	// InstallAll/RemoveAll are added in Brewfile mode
 	s.keyActions = []*InputAction{
-		s.ActionSearch, s.ActionGoMenu, s.ActionFilterPicker, s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
-		s.ActionUpdateAll, s.ActionVulnScan, s.ActionExport,
+		s.ActionSearch, s.ActionGoMenu, s.ActionMenu, s.ActionFilterPicker, s.ActionSort,
+
 		s.ActionToggleBorders, s.ActionToggleDetails, s.ActionNextPanel, s.ActionPrevPanel,
 		s.ActionShowDetails, s.ActionHelp, s.ActionBack, s.ActionQuit,
 	}
@@ -402,9 +375,9 @@ func (s *InputService) helpSections() []components.HelpSection {
 		}},
 	}
 
-	sections = append(sections, s.goMenuHelp())
+	sections = append(sections, s.goMenuHelp(), s.actionMenuHelp())
 
-	for _, title := range []string{sectionFilters, sectionActions, sectionBrewfile, sectionView} {
+	for _, title := range []string{sectionFilters, sectionBrewfile, sectionView} {
 		section := components.HelpSection{Title: title}
 		for _, a := range s.keyActions {
 			if a.Section == title {
@@ -632,7 +605,7 @@ func (s *InputService) handleVulnInstallPrompt() {
 				}
 				s.appService.vulnsService.(*VulnsService).resetAvailability()
 				s.appService.app.QueueUpdateDraw(func() {
-					s.layout.GetNotifier().ShowSuccess("brew vulns installed! Press v again to scan.")
+					s.layout.GetNotifier().ShowSuccess("brew vulns installed! Press a, then v to scan.")
 				})
 			}()
 		},
