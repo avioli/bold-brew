@@ -118,6 +118,7 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | `Ctrl+D/U` | Half page down/up |
 | `Ctrl+F/B`, `PgDn/PgUp`, `Ctrl+V`/`Alt+V` | Page down/up |
 | `Tab` / `Shift+Tab` | Switch active panel (table, details, output) |
+| `Enter` | Show details (as a popup when the panel is hidden) |
 | `Esc` | Back to table; quit from the table |
 | `?` | Help screen |
 | `q` | Quit |
@@ -127,10 +128,6 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | Key | Action |
 |-----|--------|
 | `f` | Filter picker: combine Installed/Outdated/Leaves with Formulae/Casks |
-| `o` | Toggle outdated |
-| `l` | Toggle leaves |
-| `c` | Toggle casks |
-| `F` | Toggle formulae |
 | `s` | Cycle sort (None, Downloads, Name) |
 
 ### Package Operations

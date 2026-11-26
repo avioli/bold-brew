@@ -55,28 +55,24 @@ type InputService struct {
 	keyActions     []*InputAction
 
 	// Actions for each key input
-	ActionSearch         *InputAction
-	ActionFilterPicker   *InputAction
-	ActionFilterOutdated *InputAction
-	ActionFilterLeaves   *InputAction
-	ActionFilterCasks    *InputAction
-	ActionFilterFormulae *InputAction
-	ActionSort           *InputAction
-	ActionExport         *InputAction
-	ActionVulnScan       *InputAction
-	ActionInstall        *InputAction
-	ActionUpdate         *InputAction
-	ActionRemove         *InputAction
-	ActionUpdateAll      *InputAction
-	ActionInstallAll     *InputAction
-	ActionRemoveAll      *InputAction
-	ActionToggleBorders  *InputAction
-	ActionNextPanel      *InputAction
-	ActionPrevPanel      *InputAction
-	ActionShowDetails    *InputAction
-	ActionHelp           *InputAction
-	ActionBack           *InputAction
-	ActionQuit           *InputAction
+	ActionSearch        *InputAction
+	ActionFilterPicker  *InputAction
+	ActionSort          *InputAction
+	ActionExport        *InputAction
+	ActionVulnScan      *InputAction
+	ActionInstall       *InputAction
+	ActionUpdate        *InputAction
+	ActionRemove        *InputAction
+	ActionUpdateAll     *InputAction
+	ActionInstallAll    *InputAction
+	ActionRemoveAll     *InputAction
+	ActionToggleBorders *InputAction
+	ActionNextPanel     *InputAction
+	ActionPrevPanel     *InputAction
+	ActionShowDetails   *InputAction
+	ActionHelp          *InputAction
+	ActionBack          *InputAction
+	ActionQuit          *InputAction
 }
 
 var NewInputService = func(appService *AppService, brewService BrewServiceInterface, flatpakService FlatpakServiceInterface) InputServiceInterface {
@@ -95,22 +91,6 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.ActionFilterPicker = &InputAction{
 		Key: tcell.KeyRune, Rune: 'f', KeySlug: "f", Name: "Filter picker", Section: sectionFilters,
 		Action: s.handleFilterPickerEvent,
-	}
-	s.ActionFilterOutdated = &InputAction{
-		Key: tcell.KeyRune, Rune: 'o', KeySlug: "o", Name: "Toggle outdated", Section: sectionFilters,
-		Action: func() { s.toggleStatusFilter(StatusOutdated) },
-	}
-	s.ActionFilterLeaves = &InputAction{
-		Key: tcell.KeyRune, Rune: 'l', KeySlug: "l", Name: "Toggle leaves", Section: sectionFilters,
-		Action: func() { s.toggleStatusFilter(StatusLeaves) },
-	}
-	s.ActionFilterCasks = &InputAction{
-		Key: tcell.KeyRune, Rune: 'c', KeySlug: "c", Name: "Toggle casks", Section: sectionFilters,
-		Action: func() { s.toggleKindFilter(KindCasks) },
-	}
-	s.ActionFilterFormulae = &InputAction{
-		Key: tcell.KeyRune, Rune: 'F', KeySlug: "F", Name: "Toggle formulae", Section: sectionFilters,
-		Action: func() { s.toggleKindFilter(KindFormulae) },
 	}
 	s.ActionSort = &InputAction{
 		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Cycle sort (none, downloads, name)", Section: sectionFilters,
@@ -173,9 +153,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 
 	// InstallAll/RemoveAll are added in Brewfile mode
 	s.keyActions = []*InputAction{
-		s.ActionSearch, s.ActionFilterPicker, s.ActionFilterOutdated,
-		s.ActionFilterLeaves, s.ActionFilterCasks, s.ActionFilterFormulae,
-		s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
+		s.ActionSearch, s.ActionFilterPicker, s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
 		s.ActionUpdateAll, s.ActionVulnScan, s.ActionExport,
 		s.ActionToggleBorders, s.ActionNextPanel, s.ActionPrevPanel,
 		s.ActionShowDetails, s.ActionHelp, s.ActionBack, s.ActionQuit,
@@ -454,18 +432,6 @@ func (s *InputService) handleHelpEvent() {
 	})
 
 	s.appService.GetApp().SetRoot(helpPages, true)
-}
-
-// toggleStatusFilter toggles a status filter (installed, outdated, leaves).
-func (s *InputService) toggleStatusFilter(status StatusFilter) {
-	s.appService.activeFilter.ToggleStatus(status)
-	s.applyFilter()
-}
-
-// toggleKindFilter toggles a kind filter (formulae, casks).
-func (s *InputService) toggleKindFilter(kind KindFilter) {
-	s.appService.activeFilter.ToggleKind(kind)
-	s.applyFilter()
 }
 
 // applyFilter refreshes the search label and results after a filter change.
