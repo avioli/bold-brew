@@ -148,7 +148,12 @@ func (h *HelpScreen) formatSection(title string) string {
 
 // formatKey formats a key-description pair
 func (h *HelpScreen) formatKey(key, description string) string {
-	return fmt.Sprintf("  [%s]%s[-] %s\n", h.getColorTag(h.theme.WarningColor),
+	// Without colour, keys stand out in bold instead.
+	style := h.getColorTag(h.theme.WarningColor)
+	if theme.NoColor() {
+		style += "::b"
+	}
+	return fmt.Sprintf("  [%s]%s[-:-:-] %s\n", style,
 		tview.Escape(padRight(key, helpKeyWidth)), tview.Escape(description))
 }
 
