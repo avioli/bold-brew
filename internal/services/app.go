@@ -64,6 +64,7 @@ type AppService struct {
 	inputService      InputServiceInterface
 
 	exitLog string // see ExitLog
+	noColor bool   // NO_COLOR is set
 }
 
 // NewAppService creates a new instance of AppService with initialized components.
@@ -71,13 +72,20 @@ var NewAppService = func() AppServiceInterface {
 	app := tview.NewApplication().
 		EnableMouse(true). // Capture mouse events directly to prevent middle-click paste from injecting key actions
 		EnablePaste(true)  // Use bracketed paste mode so pasted text is handled as a single event
+	// Honour NO_COLOR (tcell does not): draw through a colour-stripping screen.
+	if theme.NoColor() {
+		if screen, err := tcell.NewScreen(); err == nil {
+			app.SetScreen(theme.NoColorScreen{Screen: screen})
+		}
+	}
 	themeService := theme.NewTheme()
 	layout := ui.NewLayout(themeService)
 
 	s := &AppService{
-		app:    app,
-		theme:  themeService,
-		layout: layout,
+		noColor: theme.NoColor(),
+		app:     app,
+		theme:   themeService,
+		layout:  layout,
 
 		packages:         new([]models.Package),
 		filteredPackages: new([]models.Package),

@@ -52,50 +52,87 @@ func (s *InputService) handleGoMenuEvent() {
 	s.showMenu(" Go ", s.goMenuItems(prevFocus))
 }
 
-// showMenu shows a popup menu. Pressing an item's key (or Enter on it)
-// closes the menu and runs the item; Esc or q close it.
-func (s *InputService) showMenu(title string, items []menuItem) {
+// menuLabel formats a menu entry: the trigger key in the help screen's key
+// colour, or "(k)" when colour is disabled.
+func (s *InputService) menuLabel(key rune, label string) string {
+	if s.appService.noColor {
+		return tview.Escape(fmt.Sprintf("(%c) %s", key, label))
+	}
+	return fmt.Sprintf("[#%06x]%s[-] %s", s.appService.theme.WarningColor.Hex(),
+		tview.Escape(string(key)), tview.Escape(label))
+}
+
+// newMenuList creates a list for a popup menu whose entries are triggered by
+// keys[i]. Pressing a key selects that entry and runs onKey(i); q closes the
+// menu; j/k and Ctrl+N/P move. Entries are added by the caller.
+func (s *InputService) newMenuList(title string, keys []rune, onKey func(i int)) *tview.List {
 	list := tview.NewList().ShowSecondaryText(false)
 	list.SetBorder(true).
 		SetTitle(title).
 		SetBorderPadding(0, 0, 1, 1)
 
-	width := tview.TaggedStringWidth(title) + 4
-	for _, item := range items {
-		action := item.action
-		list.AddItem(item.label, "", item.key, func() {
-			s.closeOverlay()
-			action()
-		})
-		width = max(width, tview.TaggedStringWidth(item.label)+10)
-	}
-
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune {
+			for i, k := range keys {
+				if event.Rune() == k {
+					list.SetCurrentItem(i)
+					onKey(i)
+					return nil
+				}
+			}
+		}
 		switch {
 		case event.Key() == tcell.KeyRune && event.Rune() == 'q':
 			s.closeOverlay()
 			return nil
-		case event.Key() == tcell.KeyCtrlN:
+		case event.Key() == tcell.KeyRune && event.Rune() == 'j', event.Key() == tcell.KeyCtrlN:
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case event.Key() == tcell.KeyCtrlP:
+		case event.Key() == tcell.KeyRune && event.Rune() == 'k', event.Key() == tcell.KeyCtrlP:
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 		}
 		return event
 	})
+	return list
+}
 
+// showOverlay centers a list over the main layout.
+func (s *InputService) showOverlay(name string, list *tview.List, width int) {
 	centered := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(list, len(items)+2, 0, true).
+			AddItem(list, list.GetItemCount()+2, 0, true).
 			AddItem(nil, 0, 1, false),
 			width, 0, true).
 		AddItem(nil, 0, 1, false)
 
 	pages := tview.NewPages().
 		AddPage("main", s.layout.Root(), true, true).
-		AddPage("menu", centered, true, true)
+		AddPage(name, centered, true, true)
 	s.appService.GetApp().SetRoot(pages, true)
+}
+
+// showMenu shows a popup menu. Pressing an item's key (or Enter on it)
+// closes the menu and runs the item; Esc or q close it.
+func (s *InputService) showMenu(title string, items []menuItem) {
+	keys := make([]rune, len(items))
+	for i, item := range items {
+		keys[i] = item.key
+	}
+	run := func(i int) {
+		s.closeOverlay()
+		items[i].action()
+	}
+	list := s.newMenuList(title, keys, run)
+
+	width := tview.TaggedStringWidth(title) + 4
+	for i, item := range items {
+		text := s.menuLabel(item.key, item.label)
+		list.AddItem(text, "", 0, func() { run(i) })
+		width = max(width, tview.TaggedStringWidth(text)+6) // border, padding, margin
+	}
+
+	s.showOverlay("menu", list, width)
 }
 
 // selectedPackage returns the package selected in the table, or nil.

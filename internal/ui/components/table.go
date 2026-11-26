@@ -46,6 +46,8 @@ type Row struct {
 	Downloads    string
 	NameColor    tcell.Color // tcell.ColorDefault for none
 	VersionColor tcell.Color
+	NameAttr     tcell.AttrMask // e.g. bold, for NO_COLOR
+	VersionAttr  tcell.AttrMask
 }
 
 // fitInput holds the natural content widths a column layout is computed from.
@@ -379,9 +381,9 @@ func (t *Table) render(width int) {
 				}
 				c = t.cell(text, l.widths[col], tcell.ColorDefault)
 			case ColName:
-				c = t.cell(r.Name, l.widths[col], r.NameColor)
+				c = t.cell(r.Name, l.widths[col], r.NameColor).SetAttributes(r.NameAttr)
 			case ColVersion:
-				c = t.cell(r.Version, l.widths[col], r.VersionColor)
+				c = t.cell(r.Version, l.widths[col], r.VersionColor).SetAttributes(r.VersionAttr)
 			case ColDescription:
 				c = t.cell(r.Description, l.widths[col], tcell.ColorDefault)
 			case ColDownloads:

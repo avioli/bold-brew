@@ -167,6 +167,17 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 			row.VersionColor = tcell.ColorOrange
 		}
 
+		// Without colour: installed names bold, outdated versions underlined.
+		// Disabled/deprecated already say so in the description.
+		if s.noColor {
+			if info.LocallyInstalled {
+				row.NameAttr = tcell.AttrBold
+			}
+			if info.LocallyInstalled && info.Outdated {
+				row.VersionAttr = tcell.AttrUnderline
+			}
+		}
+
 		rows = append(rows, row)
 	}
 	s.layout.GetTable().SetRows(rows, sortColumn)

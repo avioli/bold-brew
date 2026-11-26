@@ -509,57 +509,34 @@ func (s *InputService) handleFilterPickerEvent() {
 		{"Casks", 'c', func() bool { return filter.Kind == KindCasks }, func() { filter.ToggleKind(KindCasks) }},
 	}
 
-	list := tview.NewList().ShowSecondaryText(false)
-	list.SetBorder(true).
-		SetTitle(" Filter (Esc to close) ").
-		SetBorderPadding(0, 0, 1, 1)
+	keys := make([]rune, len(options))
+	for i, o := range options {
+		keys[i] = o.shortcut
+	}
 
+	var list *tview.List
 	refresh := func() {
 		for i, o := range options {
 			mark := "○"
 			if o.active() {
 				mark = "●"
 			}
-			list.SetItemText(i, mark+" "+o.label, "")
+			list.SetItemText(i, mark+" "+s.menuLabel(o.shortcut, o.label), "")
 		}
 	}
-	for _, o := range options {
-		toggle := o.toggle
-		list.AddItem(o.label, "", o.shortcut, func() {
-			toggle()
-			refresh()
-			s.applyFilter()
-		})
+	// Toggling keeps the picker open, so filters can be combined.
+	toggle := func(i int) {
+		options[i].toggle()
+		refresh()
+		s.applyFilter()
+	}
+	list = s.newMenuList(" Filter (Esc to close) ", keys, toggle)
+	for i := range options {
+		list.AddItem("", "", 0, func() { toggle(i) })
 	}
 	refresh()
 
-	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyRune && event.Rune() == 'q':
-			s.closeOverlay()
-			return nil
-		case event.Key() == tcell.KeyRune && event.Rune() == 'j', event.Key() == tcell.KeyCtrlN:
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case event.Key() == tcell.KeyRune && event.Rune() == 'k', event.Key() == tcell.KeyCtrlP:
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		}
-		return event
-	})
-
-	const width = 28
-	centered := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(list, len(options)+2, 0, true).
-			AddItem(nil, 0, 1, false),
-			width, 0, true).
-		AddItem(nil, 0, 1, false)
-
-	pages := tview.NewPages().
-		AddPage("main", s.layout.Root(), true, true).
-		AddPage("filter", centered, true, true)
-	s.appService.GetApp().SetRoot(pages, true)
+	s.showOverlay("filter", list, 28)
 }
 
 // handleSortEvent cycles through sort modes (None → Downloads → Name).

@@ -66,6 +66,9 @@ The Details panel shows much of what `brew info` does, without running it: cavea
 ### Fits Your Terminal
 Columns size themselves to the available width. When space runs short, Bold Brew trims padding and borders, shortens headings, hides the Details panel (press `Enter` for a popup, or `d` to toggle it), and lets you scroll the Version, Description, and Downloads columns with `h`/`l` while Type and Name stay put. Status messages appear at the bottom, each for at least three seconds.
 
+### Respects NO_COLOR
+Set `NO_COLOR=1` to turn colours off (see [no-color.org](https://no-color.org/)). Installed packages then show in bold, outdated versions underlined, and menu keys as `(g)`. The variable is passed on to `brew`, which also drops its colours.
+
 ### Brewfile Workflows
 Load Brewfiles from local paths or remote URLs. Batch install/remove entire collections. Export your installed packages to a `~/Brewfile` with one keystroke. Supports `brew`, `cask`, `tap`, `mas`, and `flatpak` entries.
 
