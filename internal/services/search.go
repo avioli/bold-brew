@@ -59,6 +59,15 @@ func (s *AppService) applySortOrder(list []models.Package) {
 		sort.Slice(list, func(i, j int) bool {
 			return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name)
 		})
+	case models.SortByRank:
+		// Unranked packages (0) go last.
+		sort.SliceStable(list, func(i, j int) bool {
+			a, b := list[i].Analytics90dRank, list[j].Analytics90dRank
+			if (a > 0) != (b > 0) {
+				return a > 0
+			}
+			return a < b
+		})
 	default: // SortNone - no sorting
 	}
 }
@@ -138,6 +147,8 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 		sortColumn = components.ColName
 	case models.SortByDownloads:
 		sortColumn = components.ColDownloads
+	case models.SortByRank:
+		sortColumn = components.ColRank
 	}
 
 	rows := make([]components.Row, 0, len(*data))
@@ -148,6 +159,7 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 			Version:      info.Version,
 			Description:  info.Description,
 			Downloads:    fmt.Sprintf("%d", info.Analytics90dDownloads),
+			Rank:         rankText(info.Analytics90dRank),
 			NameColor:    tcell.ColorDefault,
 			VersionColor: tcell.ColorDefault,
 		}
@@ -214,4 +226,12 @@ func typeLetter(t models.PackageType) string {
 	default:
 		return "F"
 	}
+}
+
+// rankText formats a 90 day analytics rank; 0 means unranked.
+func rankText(rank int) string {
+	if rank <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d", rank)
 }

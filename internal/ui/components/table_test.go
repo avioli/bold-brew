@@ -5,10 +5,11 @@ import (
 	"testing"
 )
 
-// Typical content: long names (capped), 15+ char versions, 7 digit downloads.
-// Minimums are Type 1, Name 20, Version 10, Description 11, Downloads 7, so
+// Typical content: long names (capped), 15+ char versions, 7 digit downloads,
+// 5 digit ranks. Minimums are Type 1, Name 20, Version 10, Description 11,
+// Downloads 7, Rank 5, so
 // Type+Name take 23 columns including separators.
-var typicalInput = fitInput{name: 40, version: 18, downloads: 7, sortColumn: -1}
+var typicalInput = fitInput{name: 40, version: 18, downloads: 7, rank: 5, sortColumn: -1}
 
 func TestFitColumnsWindows(t *testing.T) {
 	tests := []struct {
@@ -19,22 +20,23 @@ func TestFitColumnsWindows(t *testing.T) {
 		maxOffset int
 	}{
 		{"comfortable (147 screen with details, 106 without): all columns", downloadsComfortWidth, 0,
-			[]int{ColType, ColName, ColVersion, ColDescription, ColDownloads}, 0},
+			[]int{ColType, ColName, ColVersion, ColDescription, ColDownloads, ColRank}, 0},
 		{"wide: scrolling right is a no-op", 120, 1,
-			[]int{ColType, ColName, ColVersion, ColDescription, ColDownloads}, 0},
+			[]int{ColType, ColName, ColVersion, ColDescription, ColDownloads, ColRank}, 0},
 		{"just below comfortable: Downloads hidden at first", downloadsComfortWidth - 1, 0,
 			[]int{ColType, ColName, ColVersion, ColDescription}, 1},
 		{"just below comfortable: scrolled right shows Downloads", downloadsComfortWidth - 1, 1,
-			[]int{ColType, ColName, ColDescription, ColDownloads}, 1},
+			[]int{ColType, ColName, ColDescription, ColDownloads, ColRank}, 1},
 		{"medium: offset clamps at the rightmost position", 90, 5,
-			[]int{ColType, ColName, ColDescription, ColDownloads}, 1},
+			[]int{ColType, ColName, ColDescription, ColDownloads, ColRank}, 1},
 		{"small: Description too narrow to share with Downloads", 50, 0,
 			[]int{ColType, ColName, ColVersion, ColDescription}, 2},
 		{"small: description alone", 50, 1, []int{ColType, ColName, ColDescription}, 2},
-		{"small: downloads alone", 50, 2, []int{ColType, ColName, ColDownloads}, 2},
-		{"narrow: version only", 36, 0, []int{ColType, ColName, ColVersion}, 2},
-		{"narrow: description only", 36, 1, []int{ColType, ColName, ColDescription}, 2},
-		{"narrow: downloads only", 36, 2, []int{ColType, ColName, ColDownloads}, 2},
+		{"small: downloads alone", 50, 2, []int{ColType, ColName, ColDownloads, ColRank}, 2},
+		{"narrow: version only", 36, 0, []int{ColType, ColName, ColVersion}, 3},
+		{"narrow: description only", 36, 1, []int{ColType, ColName, ColDescription}, 3},
+		{"narrow: downloads only", 36, 2, []int{ColType, ColName, ColDownloads}, 3},
+		{"narrow: rank only", 36, 3, []int{ColType, ColName, ColRank}, 3},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

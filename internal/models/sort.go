@@ -7,6 +7,7 @@ const (
 	SortNone        SortMode = iota // No explicit sort (preserves natural/API order)
 	SortByDownloads                 // Most downloaded first
 	SortByName                      // Alphabetical A-Z
+	SortByRank                      // Best 90 day analytics rank first
 )
 
 func (s SortMode) String() string {
@@ -15,6 +16,8 @@ func (s SortMode) String() string {
 		return "Downloads"
 	case SortByName:
 		return "Name"
+	case SortByRank:
+		return "Rank"
 	default:
 		return "None"
 	}
@@ -22,5 +25,5 @@ func (s SortMode) String() string {
 
 // Next cycles to the next sort mode.
 func (s SortMode) Next() SortMode {
-	return (s + 1) % 3
+	return (s + 1) % 4
 }
