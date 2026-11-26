@@ -66,7 +66,12 @@ func (s *InputService) menuLabel(key rune, label string) string {
 // keys[i]. Pressing a key selects that entry and runs onKey(i); q closes the
 // menu; j/k and Ctrl+N/P move. Entries are added by the caller.
 func (s *InputService) newMenuList(title string, keys []rune, onKey func(i int)) *tview.List {
-	list := tview.NewList().ShowSecondaryText(false)
+	// The default selected style is built from theme colours that are all the
+	// terminal default, which makes the current item invisible. Use reverse
+	// video across the row, like the package table (works with NO_COLOR too).
+	list := tview.NewList().ShowSecondaryText(false).
+		SetSelectedStyle(tcell.StyleDefault.Reverse(true)).
+		SetHighlightFullLine(true)
 	list.SetBorder(true).
 		SetTitle(title).
 		SetBorderPadding(0, 0, 1, 1)
