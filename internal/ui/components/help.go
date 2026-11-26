@@ -21,7 +21,7 @@ type HelpSection struct {
 	Keys  []HelpKey
 }
 
-const helpFooter = "j/k to scroll, any other key to close"
+const helpFooter = " j/k to scroll, any other key to close "
 
 const (
 	helpKeyWidth = 22
@@ -62,18 +62,22 @@ func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, 
 	textView.SetBackgroundColor(h.theme.ModalBgColor)
 	textView.SetTextColor(h.theme.DefaultTextColor)
 
-	// The hint sits in the frame's footer so it stays visible while the
-	// content scrolls.
 	frame := tview.NewFrame(textView).
-		SetBorders(0, 0, 0, 0, 2, 2).
-		AddText(helpFooter, false, tview.AlignCenter, h.theme.LegendColor)
+		SetBorders(0, 0, 0, 0, 2, 2)
 	frame.SetBackgroundColor(h.theme.ModalBgColor)
 	frame.SetBorder(true).
 		SetBorderColor(h.theme.BorderColor).
 		SetTitle(" Help ").
 		SetTitleAlign(tview.AlignCenter)
 
-	boxHeight := lines + 3 // borders and footer
+	// Print the hint on the bottom border, like the title on the top one, so
+	// it stays visible while the content scrolls.
+	frame.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		tview.Print(screen, helpFooter, x+1, y+height-1, width-2, tview.AlignCenter, h.theme.LegendColor)
+		return x + 1, y + 1, width - 2, height - 2
+	})
+
+	boxHeight := lines + 2 // borders
 	if maxHeight > 0 {
 		boxHeight = min(boxHeight, maxHeight)
 	}
