@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -26,6 +27,7 @@ func (s *InputService) goMenuItems(prevFocus tview.Primitive) []menuItem {
 	items := []menuItem{
 		{'g', "Go to top", func() { s.goToTop(prevFocus) }},
 		{'h', "Open homepage", s.openHomepage},
+		{'f', "Open formulae.brew.sh page", s.openFormulaePage},
 	}
 	// brew source arrived in Homebrew 7.
 	if s.appService.hasBrewSource() {
@@ -202,11 +204,43 @@ func (s *InputService) openHomepage() {
 		s.layout.GetNotifier().ShowWarning(fmt.Sprintf("No homepage for %s", pkg.Label()))
 		return
 	}
+	s.openURL(url)
+}
+
+// openURL opens a web page with the system opener.
+func (s *InputService) openURL(url string) {
 	opener := "xdg-open"
 	if runtime.GOOS == "darwin" {
 		opener = "open"
 	}
 	s.runInBackground(fmt.Sprintf("Opening %s", url), exec.Command(opener, url), false) // #nosec G204
+}
+
+// formulaePageURL returns the package's page on formulae.brew.sh, or "" when
+// it is not there (only the official homebrew/core and homebrew/cask taps
+// are listed).
+func formulaePageURL(pkg *models.Package) string {
+	switch {
+	case pkg.Formula != nil && (pkg.Formula.Tap == "" || pkg.Formula.Tap == "homebrew/core"):
+		return "https://formulae.brew.sh/formula/" + url.PathEscape(pkg.Name)
+	case pkg.Cask != nil && (pkg.Cask.Tap == "" || pkg.Cask.Tap == "homebrew/cask"):
+		return "https://formulae.brew.sh/cask/" + url.PathEscape(pkg.Name)
+	}
+	return ""
+}
+
+// openFormulaePage opens the selected package's page on formulae.brew.sh.
+func (s *InputService) openFormulaePage() {
+	pkg := s.selectedPackage()
+	if pkg == nil {
+		return
+	}
+	page := formulaePageURL(pkg)
+	if page == "" {
+		s.layout.GetNotifier().ShowWarning(fmt.Sprintf("%s is not listed on formulae.brew.sh", pkg.Label()))
+		return
+	}
+	s.openURL(page)
 }
 
 // openSource opens the selected formula's source repository with
