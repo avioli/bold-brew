@@ -20,14 +20,16 @@ const DetailsPadding = 1
 const DetailsMinWidth = 34 + 2*DetailsPadding + 1
 
 type Details struct {
-	view  *tview.TextView
-	theme *theme.Theme
+	view        *tview.TextView
+	theme       *theme.Theme
+	inlineTitle bool
 }
 
 func NewDetails(theme *theme.Theme) *Details {
 	details := &Details{
-		view:  tview.NewTextView(),
-		theme: theme,
+		view:        tview.NewTextView(),
+		theme:       theme,
+		inlineTitle: true,
 	}
 
 	details.view.SetDynamicColors(true)
@@ -43,14 +45,25 @@ func NewDetails(theme *theme.Theme) *Details {
 		for row := y; row < y+height; row++ {
 			screen.SetContent(x, row, tview.Borders.Vertical, nil, borderStyle)
 		}
+		// Left border, then one column of padding on each side.
+		innerX, innerWidth := x+1+DetailsPadding, width-1-2*DetailsPadding
+		if !details.inlineTitle {
+			// The title is drawn on the outer border by the layout.
+			return innerX, y, innerWidth, height
+		}
 		title := " Details "
 		for i, ch := range title {
 			screen.SetContent(x+1+i, y, ch, nil, titleStyle)
 		}
-		// Left border, then one column of padding on each side.
-		return x + 1 + DetailsPadding, y + 2, width - 1 - 2*DetailsPadding, height - 2
+		return innerX, y + 2, innerWidth, height - 2
 	})
 	return details
+}
+
+// SetInlineTitle draws the "Details" title inside the panel. Turn it off when
+// the layout draws the title on the outer border instead.
+func (d *Details) SetInlineTitle(inline bool) {
+	d.inlineTitle = inline
 }
 
 func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) {

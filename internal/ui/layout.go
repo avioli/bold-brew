@@ -4,6 +4,7 @@ import (
 	"bbrew/internal/ui/components"
 	"bbrew/internal/ui/theme"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -43,8 +44,27 @@ type LayoutInterface interface {
 	GetHelpScreen() *components.HelpScreen
 }
 
+// Panel titles drawn on the outer border.
+const (
+	titlePackages = "Formulas & Casks"
+	titleDetails  = "Details"
+	titleOutput   = "Log"
+)
+
+// titledGrid draws panel titles onto the grid's borders after the grid itself.
+type titledGrid struct {
+	*tview.Grid
+	layout *Layout
+}
+
+func (g *titledGrid) Draw(screen tcell.Screen) {
+	g.Grid.Draw(screen)
+	g.layout.drawTitles(screen)
+}
+
 type Layout struct {
-	grid        *tview.Grid
+	grid        *titledGrid
+	leftColumn  *tview.Flex
 	mainContent *tview.Flex
 	filtersArea *tview.Frame
 	tableFrame  *tview.Frame
@@ -60,12 +80,14 @@ type Layout struct {
 
 	width, height int
 	bordersHidden bool // user preference
+	bordersShown  bool // current state
 	dirty         bool
+	theme         *theme.Theme
 }
 
 func NewLayout(t *theme.Theme) LayoutInterface {
-	return &Layout{
-		grid:       tview.NewGrid(),
+	l := &Layout{
+		theme:      t,
 		search:     components.NewSearch(t),
 		table:      components.NewTable(t),
 		details:    components.NewDetails(t),
@@ -76,6 +98,8 @@ func NewLayout(t *theme.Theme) LayoutInterface {
 		helpScreen: components.NewHelpScreen(t),
 		dirty:      true,
 	}
+	l.grid = &titledGrid{Grid: tview.NewGrid(), layout: l}
+	return l
 }
 
 func (l *Layout) setupLayout() {
@@ -91,14 +115,14 @@ func (l *Layout) setupLayout() {
 		SetBorders(0, 0, 0, 0, widePadding, widePadding)
 
 	// Left column with search and table
-	leftColumn := tview.NewFlex().SetDirection(tview.FlexRow).
+	l.leftColumn = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(l.filtersArea, 2, 0, false).
 		AddItem(l.tableFrame, 0, 1, false)
 
 	// Central content: table takes the rest, details has a fixed width set
 	// by Resize.
 	l.mainContent = tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(leftColumn, 0, 1, false).
+		AddItem(l.leftColumn, 0, 1, false).
 		AddItem(l.details.View(), components.DetailsMinWidth, 0, false)
 
 	// Status line: messages on the left, short help on the right
@@ -137,7 +161,9 @@ func (l *Layout) Resize(width, height int) {
 	}
 	l.width, l.height, l.dirty = width, height, false
 
-	l.grid.SetBorders(!l.bordersHidden && width > NoBordersWidth)
+	l.bordersShown = !l.bordersHidden && width > NoBordersWidth
+	l.grid.SetBorders(l.bordersShown)
+	l.details.SetInlineTitle(!l.bordersShown)
 
 	pad := widePadding
 	if width <= CompactPadWidth {
@@ -161,3 +187,41 @@ func (l *Layout) GetLegend() *components.Legend         { return l.legend }
 func (l *Layout) GetNotifier() *components.Notifier     { return l.notifier }
 func (l *Layout) GetModal() *components.Modal           { return l.modal }
 func (l *Layout) GetHelpScreen() *components.HelpScreen { return l.helpScreen }
+
+// drawTitles writes each panel's title onto the border above it and joins the
+// details separator to the horizontal borders. The focused panel's title is
+// highlighted.
+func (l *Layout) drawTitles(screen tcell.Screen) {
+	if !l.bordersShown {
+		return
+	}
+
+	borderStyle := tcell.StyleDefault.Foreground(l.theme.BorderColor)
+	titleStyle := tcell.StyleDefault.Foreground(l.theme.TitleColor)
+
+	// indent is the number of border columns before the title.
+	title := func(p tview.Primitive, text string, focused bool, indent int) {
+		x, y, width, _ := p.GetRect()
+		x, width = x+indent-1, width-indent+1
+		style := titleStyle
+		if focused {
+			style = style.Reverse(true)
+		}
+		for i, ch := range []rune(" " + text + " ") {
+			if i >= width-2 {
+				break
+			}
+			screen.SetContent(x+1+i, y-1, ch, nil, style)
+		}
+	}
+
+	title(l.leftColumn, titlePackages, l.table.View().HasFocus(), 1)
+	title(l.details.View(), titleDetails, l.details.View().HasFocus(), 2)
+	title(l.output.View(), titleOutput, l.output.View().HasFocus(), 1)
+
+	// The details panel draws its own vertical separator; give it proper
+	// junctions with the borders above and below.
+	x, y, _, height := l.details.View().GetRect()
+	screen.SetContent(x, y-1, tview.Borders.TopT, nil, borderStyle)
+	screen.SetContent(x, y+height, tview.Borders.BottomT, nil, borderStyle)
+}

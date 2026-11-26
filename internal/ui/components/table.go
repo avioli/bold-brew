@@ -21,7 +21,8 @@ const (
 const (
 	maxNameWidth    = 32
 	maxVersionWidth = 15
-	minDescWidth    = 1
+	minDescWidth    = 12 // Description shrinks to this before Name shrinks
+	minNameWidth    = 12 // Name never shrinks below this
 	sortIndicator   = " ▼"
 )
 
@@ -193,14 +194,21 @@ func (t *Table) render(width int) {
 		widths = append(widths, max(t.downloadsWidth, tview.TaggedStringWidth(headers[ColDownloads])))
 	}
 
-	// tview reserves one column of separator after every column.
-	used := 0
+	// Space left for Name and Description; tview reserves one column of
+	// separator after every column.
+	avail := width
 	for i, w := range widths {
-		if i != ColDescription {
-			used += w + 1
+		if i != ColName && i != ColDescription {
+			avail -= w + 1
 		}
 	}
-	widths[ColDescription] = max(width-used-1, minDescWidth)
+	avail -= 2 // separators after Name and Description
+
+	// Description absorbs the pressure first. Once it is down to its
+	// minimum, Name gives up space (truncated with an ellipsis) rather than
+	// pushing Version and Downloads off the panel.
+	widths[ColName] = min(widths[ColName], max(avail-minDescWidth, minNameWidth))
+	widths[ColDescription] = max(avail-widths[ColName], 1)
 
 	view := t.view.Table
 	view.Clear()
