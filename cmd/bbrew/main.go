@@ -66,6 +66,11 @@ func main() {
 	if err := appService.GetApp().Run(); err != nil {
 		log.Fatalf("Application error: %v", err)
 	}
+
+	// The screen is restored now; show what a stopped command had done.
+	if exitLog := appService.ExitLog(); exitLog != "" {
+		fmt.Println(exitLog)
+	}
 }
 
 // isFlagPassed checks if a flag was explicitly passed on the command line.

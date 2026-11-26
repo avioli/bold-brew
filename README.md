@@ -131,6 +131,7 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 | `Esc` | Back to table; clear a `gd`/`gu` filter; quit from the table |
 | `?` | Help screen |
 | `q` | Quit |
+| `Q`, `Ctrl+C` | Quit from anywhere. If a command is still running, press again to stop it; its log is printed after the screen is restored |
 
 ### Go Menu (`g`)
 

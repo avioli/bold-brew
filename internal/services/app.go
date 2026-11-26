@@ -29,6 +29,9 @@ type AppServiceInterface interface {
 	SetBrewfilePath(path string)
 	IsBrewfileMode() bool
 	GetBrewfilePackages() *[]models.Package
+	// ExitLog is output to print after the TUI exits (the log of a command
+	// stopped by quitting), or "".
+	ExitLog() string
 }
 
 // AppService manages the application state, Homebrew integration, and UI components.
@@ -59,6 +62,8 @@ type AppService struct {
 	dataProvider      DataProviderInterface // Direct access for Brewfile operations
 	selfUpdateService SelfUpdateServiceInterface
 	inputService      InputServiceInterface
+
+	exitLog string // see ExitLog
 }
 
 // NewAppService creates a new instance of AppService with initialized components.
@@ -97,6 +102,7 @@ var NewAppService = func() AppServiceInterface {
 func (s *AppService) GetApp() *tview.Application    { return s.app }
 func (s *AppService) GetLayout() ui.LayoutInterface { return s.layout }
 func (s *AppService) SetBrewfilePath(path string)   { s.brewfilePath = path }
+func (s *AppService) ExitLog() string               { return s.exitLog }
 func (s *AppService) IsBrewfileMode() bool          { return s.brewfilePath != "" }
 
 // outputWriter returns a thread-safe writer that streams to the output panel.

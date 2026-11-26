@@ -3,6 +3,8 @@ package services
 import (
 	"fmt"
 	"io"
+	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -52,6 +54,7 @@ type InputService struct {
 	brewService    BrewServiceInterface
 	flatpakService FlatpakServiceInterface
 	keyActions     []*InputAction
+	quitArmedAt    time.Time // first quit press while a command was running
 
 	// Actions for each key input
 	ActionSearch        *InputAction
@@ -185,6 +188,13 @@ func (s *InputService) cyclePanel(dir int) {
 
 // HandleKeyEventInput processes key events and triggers the corresponding actions.
 func (s *InputService) HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKey {
+	// Q and Ctrl+C quit from anywhere (in the search field, Q is just text).
+	if event.Key() == tcell.KeyCtrlC ||
+		(event.Key() == tcell.KeyRune && event.Rune() == 'Q' && !s.layout.GetSearch().Field().HasFocus()) {
+		s.handleQuitEvent()
+		return nil
+	}
+
 	// The details panel may have been hidden (narrow screen) while focused.
 	if !s.layout.DetailsVisible() && s.layout.GetDetails().View().HasFocus() {
 		s.appService.GetApp().SetFocus(s.layout.GetTable().View())
@@ -350,9 +360,36 @@ func (s *InputService) handleSearchFieldEvent() {
 	s.appService.GetApp().SetFocus(s.layout.GetSearch().Field())
 }
 
-// handleQuitEvent is called when the user presses the quit key (q).
+// quitConfirmWindow is how long a second quit press has to stop a running
+// command and quit.
+const quitConfirmWindow = 3 * time.Second
+
+// handleQuitEvent quits (q, Q, Ctrl+C, Esc from the table). If a command is
+// still running, the first press only warns; a second press within
+// quitConfirmWindow stops the command and quits, and its log is printed to
+// the terminal afterwards.
 func (s *InputService) handleQuitEvent() {
-	s.appService.GetApp().Stop()
+	commands := RunningCommands()
+	if len(commands) == 0 {
+		s.appService.GetApp().Stop()
+		return
+	}
+
+	if time.Since(s.quitArmedAt) > quitConfirmWindow {
+		s.quitArmedAt = time.Now()
+		s.layout.GetNotifier().ShowError(fmt.Sprintf(
+			"%q is still running. Press Q again to stop it and quit.", commands[0]))
+		return
+	}
+
+	// Keep what the command printed so far, to show after the TUI is gone.
+	s.appService.exitLog = fmt.Sprintf("Stopped: %s\n\n%s",
+		strings.Join(commands, "\n"), s.layout.GetOutput().View().GetText(true))
+	app := s.appService.GetApp()
+	go func() {
+		StopRunningCommands(5 * time.Second)
+		app.Stop()
+	}()
 }
 
 // helpSections builds the help screen content from the key bindings.
@@ -371,6 +408,7 @@ func (s *InputService) helpSections() []components.HelpSection {
 			{Keys: "/", Description: "Focus search"},
 			{Keys: "Esc", Description: "Back to table, clear gd/gu, or quit"},
 			{Keys: "q", Description: "Quit"},
+			{Keys: "Q, Ctrl+C", Description: "Quit from anywhere"},
 			{Keys: "?", Description: "This help"},
 		}},
 	}
