@@ -115,6 +115,7 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | `/` | Search packages |
 | `Up/Down`, `j/k`, `Ctrl+N/P` | Move down/up |
 | `g/G`, `Home/End`, `Alt+<`/`Alt+>` | Go to top/bottom |
+| `Left/Right`, `h/l` | Scroll the Version, Description and Downloads columns when they do not all fit (Type and Name stay) |
 | `Ctrl+D/U` | Half page down/up |
 | `Ctrl+F/B`, `PgDn/PgUp`, `Ctrl+V`/`Alt+V` | Page down/up |
 | `Tab` / `Shift+Tab` | Switch active panel (table, details, output) |
@@ -153,6 +154,7 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | Key | Action |
 |-----|--------|
 | `b` | Toggle borders (also hidden automatically on narrow terminals) |
+| `d` | Toggle the details panel (also hidden automatically on narrow terminals) |
 
 </details>
 

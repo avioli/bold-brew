@@ -9,14 +9,12 @@ import (
 )
 
 // Screen width breakpoints, from widest to narrowest. At or below each width
-// the layout gives up a little more decoration to keep the table readable.
+// the layout gives up a little more decoration. The table's columns are
+// fitted to the table's own width (see components.Table).
 const (
-	HideDownloadsWidth = 146 // hide the Downloads column
-	CompactPadWidth    = 120 // shrink frame padding, short counter label
-	CompactTypeWidth   = 100 // Type column becomes "T" with "F"/"C"
-	HideDescWidth      = 99  // hide the Description column (below 100), until details hides
-	NoBordersWidth     = 90  // drop the outer and row borders
-	HideDetailsWidth   = 80  // hide the details panel
+	CompactPadWidth  = 120 // shrink frame padding, short counter label
+	NoBordersWidth   = 90  // drop the outer and row borders
+	HideDetailsWidth = 80  // hide the details panel
 )
 
 const (
@@ -34,6 +32,9 @@ type LayoutInterface interface {
 	// ToggleBorders hides or shows the borders (they are also hidden
 	// automatically on narrow screens).
 	ToggleBorders()
+	// ToggleDetails hides or shows the details panel (it is also hidden
+	// automatically on narrow screens).
+	ToggleDetails()
 	// DetailsVisible reports whether the details panel is shown.
 	DetailsVisible() bool
 	// SetPackagesTitle sets the title of the package panel, e.g. "Installed Casks".
@@ -86,6 +87,7 @@ type Layout struct {
 
 	width, height int
 	bordersHidden bool // user preference
+	detailsHidden bool // user preference
 	bordersShown  bool // current state
 	detailsShown  bool
 	packagesTitle string
@@ -164,6 +166,11 @@ func (l *Layout) ToggleBorders() {
 	l.dirty = true
 }
 
+func (l *Layout) ToggleDetails() {
+	l.detailsHidden = !l.detailsHidden
+	l.dirty = true
+}
+
 func (l *Layout) Resize(width, height int) {
 	if !l.dirty && width == l.width && height == l.height {
 		return
@@ -181,7 +188,7 @@ func (l *Layout) Resize(width, height int) {
 	l.filtersArea.SetBorders(0, 0, 0, 0, pad, pad)
 	l.tableFrame.SetBorders(0, 0, 0, 0, pad, pad)
 
-	l.detailsShown = width > HideDetailsWidth
+	l.detailsShown = !l.detailsHidden && width > HideDetailsWidth
 	detailsWidth := 0
 	if l.detailsShown {
 		detailsWidth = max(components.DetailsMinWidth, width/4)
@@ -189,10 +196,6 @@ func (l *Layout) Resize(width, height int) {
 	l.mainContent.ResizeItem(l.details.View(), detailsWidth, 0)
 
 	l.search.SetCompact(width <= CompactPadWidth)
-	l.table.SetCompactType(width <= CompactTypeWidth)
-	l.table.SetShowDownloads(width > HideDownloadsWidth)
-	// Description returns when the details panel hides and frees its space.
-	l.table.SetShowDescription(width > HideDescWidth || !l.detailsShown)
 }
 
 func (l *Layout) DetailsVisible() bool { return l.detailsShown }

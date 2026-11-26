@@ -16,14 +16,18 @@ const (
 	ColVersion
 	ColDescription
 	ColDownloads
+	numColumns
 )
 
+// Column sizing rules. See fitColumns.
 const (
-	maxNameWidth    = 32
-	maxVersionWidth = 15
-	minDescWidth    = 12 // Description shrinks to this before Name shrinks
-	minNameWidth    = 12 // Name never shrinks below this
-	sortIndicator   = " ▼"
+	maxNameWidth     = 32 // Name never grows beyond this (ellipsis)
+	clipNameWidth    = 20 // Name may be clipped down to this
+	maxVersionWidth  = 15 // Version never grows beyond this
+	clipVersionWidth = 10 // Version may be clipped down to this
+	minDescWidth     = 11 // len("Description"); Description prefers at least this
+	lastDescWidth    = 5  // ...but shows down to this rather than hiding
+	sortIndicator    = " ▼"
 )
 
 // Row is the display data for one package row. Text fields are plain text
@@ -38,22 +42,164 @@ type Row struct {
 	VersionColor tcell.Color
 }
 
-// Table renders package rows and fits its columns to the available width:
-// Type, Name, Version and Downloads keep their width and Description absorbs
-// the pressure.
+// fitInput holds the natural content widths a column layout is computed from.
+type fitInput struct {
+	name, version, downloads int // widest cell over all rows
+	sortColumn               int
+}
+
+// fitResult is a computed column layout.
+type fitResult struct {
+	columns   []int // visible columns, in order
+	widths    [numColumns]int
+	headers   [numColumns]string
+	compact   bool // Type shown as "F" rather than "[F]"
+	offset    int  // clamped scroll offset
+	maxOffset int
+}
+
+// scrollable columns, in order; Type and Name are always visible (frozen).
+var scrollable = []int{ColVersion, ColDescription, ColDownloads}
+
+func headerText(col int, label string, sortColumn int) string {
+	if col == sortColumn {
+		return label + sortIndicator
+	}
+	return label
+}
+
+// fitColumns lays out the columns in the given width.
+//
+//  1. Every column gets its minimum: Type 1 ("T"/"F"), Name up to 20, Version
+//     up to 10, Description 11, Downloads its digits (header "Dl").
+//  2. Type and Name are always shown. Version, Description and Downloads form
+//     a window, starting at offset, of as many columns as fit at their
+//     minimum. Description is squeezed down to 5 before it is dropped.
+//  3. Leftover space goes, in order, to Version (up to its content), Type
+//     ("Type"/"[F]"), Downloads (header "Downloads"), Name (up to 32) and the
+//     rest to Description.
+//
+// tview puts a one column separator after every column.
+func fitColumns(width int, in fitInput, offset int) fitResult {
+	var r fitResult
+	s := in.sortColumn
+	w := tview.TaggedStringWidth
+
+	nameHeader := headerText(ColName, "Name", s)
+	versionHeader := headerText(ColVersion, "Version", s)
+	descHeader := headerText(ColDescription, "Description", s)
+	dlFull := headerText(ColDownloads, "Downloads", s)
+	dlShort := headerText(ColDownloads, "Dl", s)
+
+	nat := [numColumns]int{
+		ColType:        4, // "Type", "[F]"
+		ColName:        max(min(in.name, maxNameWidth), w(nameHeader)),
+		ColVersion:     max(min(in.version, maxVersionWidth), w(versionHeader)),
+		ColDescription: 0, // flexible
+		ColDownloads:   max(in.downloads, w(dlFull)),
+	}
+	minW := [numColumns]int{
+		ColType:        1,
+		ColName:        min(nat[ColName], clipNameWidth),
+		ColVersion:     min(nat[ColVersion], clipVersionWidth),
+		ColDescription: minDescWidth,
+		ColDownloads:   max(in.downloads, w(dlShort)),
+	}
+
+	avail := width - (minW[ColType] + 1) - (minW[ColName] + 1)
+
+	// window returns the scrollable columns that fit from offset o, with
+	// their widths, and the space they use.
+	window := func(o int) (cols, widths []int, used int) {
+		for _, col := range scrollable[o:] {
+			cw := minW[col]
+			if col == ColDescription && used+cw+1 > avail {
+				cw = avail - used - 1
+				if cw < lastDescWidth {
+					break
+				}
+			}
+			if used+cw+1 > avail {
+				break
+			}
+			cols, widths, used = append(cols, col), append(widths, cw), used+cw+1
+		}
+		return cols, widths, used
+	}
+
+	// The furthest offset is the first one whose window reaches the last
+	// column; scrolling further would only hide columns on the left.
+	last := scrollable[len(scrollable)-1]
+	r.maxOffset = len(scrollable) - 1
+	for o := range scrollable {
+		if cols, _, _ := window(o); len(cols) > 0 && cols[len(cols)-1] == last {
+			r.maxOffset = o
+			break
+		}
+	}
+	r.offset = min(max(offset, 0), r.maxOffset)
+
+	cols, widths, used := window(r.offset)
+	r.widths[ColType], r.widths[ColName] = minW[ColType], minW[ColName]
+	shown := map[int]bool{}
+	for i, col := range cols {
+		r.widths[col] = widths[i]
+		shown[col] = true
+	}
+
+	// Distribute leftover space.
+	extra := max(avail-used, 0)
+	grow := func(col, target int) {
+		if add := min(max(target-r.widths[col], 0), extra); add > 0 {
+			r.widths[col] += add
+			extra -= add
+		}
+	}
+	if shown[ColVersion] {
+		grow(ColVersion, nat[ColVersion])
+	}
+	if extra >= nat[ColType]-r.widths[ColType] {
+		grow(ColType, nat[ColType])
+	}
+	if shown[ColDownloads] && extra >= nat[ColDownloads]-r.widths[ColDownloads] {
+		grow(ColDownloads, nat[ColDownloads])
+	}
+	grow(ColName, nat[ColName])
+	if shown[ColDescription] {
+		grow(ColDescription, r.widths[ColDescription]+extra)
+	}
+
+	r.compact = r.widths[ColType] < nat[ColType]
+	r.headers = [numColumns]string{
+		ColType:        "Type",
+		ColName:        nameHeader,
+		ColVersion:     versionHeader,
+		ColDescription: descHeader,
+		ColDownloads:   dlFull,
+	}
+	if r.compact {
+		r.headers[ColType] = "T"
+	}
+	if r.widths[ColDownloads] < w(dlFull) {
+		r.headers[ColDownloads] = dlShort
+	}
+
+	r.columns = append([]int{ColType, ColName}, cols...)
+	return r
+}
+
+// Table renders package rows and fits its columns to the available width.
+// Type and Name are frozen; Version, Description and Downloads scroll
+// horizontally (h/l, Left/Right) when they do not all fit.
 type Table struct {
 	view  *fitTable
 	theme *theme.Theme
 
-	rows       []Row
-	sortColumn int // column showing the sort indicator, -1 for none
+	rows []Row
+	in   fitInput
 
-	// Natural (uncapped by available space) widths, computed from all rows.
-	nameWidth, versionWidth, downloadsWidth int
-
-	compactType     bool
-	showDownloads   bool
-	showDescription bool
+	offset int       // requested horizontal scroll offset
+	layout fitResult // last computed layout
 
 	lastWidth int
 	dirty     bool
@@ -66,19 +212,18 @@ type fitTable struct {
 }
 
 func (f *fitTable) Draw(screen tcell.Screen) {
-	_, _, width, _ := f.GetInnerRect()
+	x, y, width, _ := f.GetInnerRect()
 	if f.owner.dirty || width != f.owner.lastWidth {
 		f.owner.render(width)
 	}
 	f.Table.Draw(screen)
+	f.owner.drawScrollHints(screen, x, y, width)
 }
 
 func NewTable(theme *theme.Theme) *Table {
 	table := &Table{
-		theme:           theme,
-		sortColumn:      -1,
-		showDownloads:   true,
-		showDescription: true,
+		theme: theme,
+		in:    fitInput{sortColumn: -1},
 	}
 	table.view = &fitTable{Table: tview.NewTable(), owner: table}
 
@@ -94,6 +239,19 @@ func NewTable(theme *theme.Theme) *Table {
 	view.SetSelectedStyle(focused)
 	view.SetFocusFunc(func() { view.SetSelectedStyle(focused) })
 	view.SetBlurFunc(func() { view.SetSelectedStyle(blurred) })
+
+	// h/l and Left/Right scroll the non-frozen columns.
+	view.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyLeft, event.Key() == tcell.KeyRune && event.Rune() == 'h':
+			table.ScrollColumns(-1)
+			return nil
+		case event.Key() == tcell.KeyRight, event.Key() == tcell.KeyRune && event.Rune() == 'l':
+			table.ScrollColumns(1)
+			return nil
+		}
+		return event
+	})
 
 	return table
 }
@@ -118,27 +276,13 @@ func (t *Table) Clear() {
 	t.view.Clear()
 }
 
-// SetCompactType switches the Type column between "Type"/"[F]" and "T"/"F".
-func (t *Table) SetCompactType(compact bool) {
-	if t.compactType != compact {
-		t.compactType = compact
-		t.dirty = true
-	}
-}
-
-// SetShowDescription shows or hides the Description column.
-func (t *Table) SetShowDescription(show bool) {
-	if t.showDescription != show {
-		t.showDescription = show
-		t.dirty = true
-	}
-}
-
-// SetShowDownloads shows or hides the Downloads column.
-func (t *Table) SetShowDownloads(show bool) {
-	if t.showDownloads != show {
-		t.showDownloads = show
-		t.dirty = true
+// ScrollColumns moves the window of non-frozen columns by dir (+1 right,
+// -1 left). It does nothing when all columns fit.
+func (t *Table) ScrollColumns(dir int) {
+	offset := min(max(t.layout.offset+dir, 0), t.layout.maxOffset)
+	if offset != t.layout.offset {
+		t.offset = offset
+		t.render(t.lastWidth)
 	}
 }
 
@@ -146,16 +290,12 @@ func (t *Table) SetShowDownloads(show bool) {
 // the sort key, or -1.
 func (t *Table) SetRows(rows []Row, sortColumn int) {
 	t.rows = rows
-	t.sortColumn = sortColumn
-
-	t.nameWidth, t.versionWidth, t.downloadsWidth = 0, 0, 0
+	t.in = fitInput{sortColumn: sortColumn}
 	for _, r := range rows {
-		t.nameWidth = max(t.nameWidth, tview.TaggedStringWidth(tview.Escape(r.Name)))
-		t.versionWidth = max(t.versionWidth, tview.TaggedStringWidth(tview.Escape(r.Version)))
-		t.downloadsWidth = max(t.downloadsWidth, len(r.Downloads))
+		t.in.name = max(t.in.name, tview.TaggedStringWidth(tview.Escape(r.Name)))
+		t.in.version = max(t.in.version, tview.TaggedStringWidth(tview.Escape(r.Version)))
+		t.in.downloads = max(t.in.downloads, len(r.Downloads))
 	}
-	t.nameWidth = min(t.nameWidth, maxNameWidth)
-	t.versionWidth = min(t.versionWidth, maxVersionWidth)
 
 	// Render right away when the width is known, so selection works on the
 	// new cells immediately; otherwise the first draw renders.
@@ -166,78 +306,23 @@ func (t *Table) SetRows(rows []Row, sortColumn int) {
 	}
 }
 
-func (t *Table) header(col int, label string) string {
-	if col == t.sortColumn {
-		return label + sortIndicator
-	}
-	return label
-}
-
 // render rebuilds all cells for the given inner width.
 func (t *Table) render(width int) {
 	t.lastWidth = width
 	t.dirty = false
 
-	typeHeader := "Type"
-	typeWidth := 4
-	if t.compactType {
-		typeHeader, typeWidth = "T", 1
-	}
-
-	// Logical columns (indexed by Col*) and their widths.
-	headers := []string{
-		typeHeader,
-		t.header(ColName, "Name"),
-		t.header(ColVersion, "Version"),
-		t.header(ColDescription, "Description"),
-		t.header(ColDownloads, "Downloads"),
-	}
-	widths := []int{
-		typeWidth,
-		max(t.nameWidth, tview.TaggedStringWidth(headers[ColName])),
-		max(t.versionWidth, tview.TaggedStringWidth(headers[ColVersion])),
-		0, // description, computed below
-		max(t.downloadsWidth, tview.TaggedStringWidth(headers[ColDownloads])),
-	}
-
-	visible := []int{ColType, ColName, ColVersion}
-	if t.showDescription {
-		visible = append(visible, ColDescription)
-	}
-	if t.showDownloads {
-		visible = append(visible, ColDownloads)
-	}
-
-	// Space left for Name and Description; tview reserves one column of
-	// separator after every column.
-	avail := width
-	for _, col := range visible {
-		avail-- // separator
-		if col != ColName && col != ColDescription {
-			avail -= widths[col]
-		}
-	}
-
-	if t.showDescription {
-		// Description absorbs the pressure first. Once it is down to its
-		// minimum, Name gives up space (truncated with an ellipsis) rather
-		// than pushing Version and Downloads off the panel.
-		widths[ColName] = min(widths[ColName], max(avail-minDescWidth, minNameWidth))
-		widths[ColDescription] = max(avail-widths[ColName], 1)
-	} else {
-		widths[ColName] = min(widths[ColName], max(avail, minNameWidth))
-	}
+	l := fitColumns(width, t.in, t.offset)
+	t.layout = l
 
 	view := t.view.Table
 	view.Clear()
 
 	// Header cells are padded to the full column width, data cells are capped
 	// at it, so every column has a stable width regardless of scrolling.
-	for pos, col := range visible {
-		h := headers[col]
+	for pos, col := range l.columns {
+		h := l.headers[col]
 		text := h
-		pad := widths[col] - tview.TaggedStringWidth(h)
-		if pad > 0 {
+		if pad := l.widths[col] - tview.TaggedStringWidth(h); pad > 0 {
 			if col == ColDownloads {
 				text = strings.Repeat(" ", pad) + h
 			} else {
@@ -248,7 +333,7 @@ func (t *Table) render(width int) {
 			Text:            text,
 			NotSelectable:   true,
 			Align:           tview.AlignLeft,
-			MaxWidth:        widths[col],
+			MaxWidth:        l.widths[col],
 			Color:           t.theme.TableHeaderColor,
 			BackgroundColor: t.theme.DefaultBgColor,
 		})
@@ -256,26 +341,40 @@ func (t *Table) render(width int) {
 
 	for i, r := range t.rows {
 		row := i + 1
-		typeText := r.Type
-		if !t.compactType {
-			typeText = "[" + r.Type + "]"
-		}
-		for pos, col := range visible {
+		for pos, col := range l.columns {
 			var c *tview.TableCell
 			switch col {
 			case ColType:
-				c = t.cell(typeText, widths[col], tcell.ColorDefault)
+				text := r.Type
+				if !l.compact {
+					text = "[" + r.Type + "]"
+				}
+				c = t.cell(text, l.widths[col], tcell.ColorDefault)
 			case ColName:
-				c = t.cell(r.Name, widths[col], r.NameColor)
+				c = t.cell(r.Name, l.widths[col], r.NameColor)
 			case ColVersion:
-				c = t.cell(r.Version, widths[col], r.VersionColor)
+				c = t.cell(r.Version, l.widths[col], r.VersionColor)
 			case ColDescription:
-				c = t.cell(r.Description, widths[col], tcell.ColorDefault)
+				c = t.cell(r.Description, l.widths[col], tcell.ColorDefault)
 			case ColDownloads:
-				c = t.cell(r.Downloads, widths[col], tcell.ColorDefault).SetAlign(tview.AlignRight)
+				c = t.cell(r.Downloads, l.widths[col], tcell.ColorDefault).SetAlign(tview.AlignRight)
 			}
 			view.SetCell(row, pos, c)
 		}
+	}
+}
+
+// drawScrollHints marks the header with ‹ and › when columns are scrolled
+// out of view on either side. They go in separator columns, which are
+// otherwise blank.
+func (t *Table) drawScrollHints(screen tcell.Screen, x, y, width int) {
+	l := t.layout
+	style := tcell.StyleDefault.Foreground(t.theme.TableHeaderColor).Background(t.theme.DefaultBgColor)
+	if l.offset > 0 {
+		screen.SetContent(x+l.widths[ColType]+1+l.widths[ColName], y, '‹', nil, style)
+	}
+	if l.offset < l.maxOffset {
+		screen.SetContent(x+width-1, y, '›', nil, style)
 	}
 }
 

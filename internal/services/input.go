@@ -67,6 +67,7 @@ type InputService struct {
 	ActionInstallAll    *InputAction
 	ActionRemoveAll     *InputAction
 	ActionToggleBorders *InputAction
+	ActionToggleDetails *InputAction
 	ActionNextPanel     *InputAction
 	ActionPrevPanel     *InputAction
 	ActionShowDetails   *InputAction
@@ -132,6 +133,10 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 		Key: tcell.KeyRune, Rune: 'b', KeySlug: "b", Name: "Toggle borders", Section: sectionView,
 		Action: s.layout.ToggleBorders,
 	}
+	s.ActionToggleDetails = &InputAction{
+		Key: tcell.KeyRune, Rune: 'd', KeySlug: "d", Name: "Toggle details panel", Section: sectionView,
+		Action: s.layout.ToggleDetails,
+	}
 	s.ActionNextPanel = &InputAction{
 		Key: tcell.KeyTab, Action: func() { s.cyclePanel(1) },
 	}
@@ -155,7 +160,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.keyActions = []*InputAction{
 		s.ActionSearch, s.ActionFilterPicker, s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
 		s.ActionUpdateAll, s.ActionVulnScan, s.ActionExport,
-		s.ActionToggleBorders, s.ActionNextPanel, s.ActionPrevPanel,
+		s.ActionToggleBorders, s.ActionToggleDetails, s.ActionNextPanel, s.ActionPrevPanel,
 		s.ActionShowDetails, s.ActionHelp, s.ActionBack, s.ActionQuit,
 	}
 
@@ -377,6 +382,7 @@ func (s *InputService) helpSections() []components.HelpSection {
 			{Keys: "↑/↓, j/k, Ctrl+N/P", Description: "Move down/up"},
 			{Keys: "g/G, Home/End", Description: "Go to top/bottom"},
 			{Keys: "Alt+< / Alt+>", Description: "Go to top/bottom"},
+			{Keys: "←/→, h/l", Description: "Scroll columns (Type and Name stay)"},
 			{Keys: "Ctrl+D/U", Description: "Half page down/up"},
 			{Keys: "Ctrl+F/B, PgDn/PgUp", Description: "Page down/up"},
 			{Keys: "Ctrl+V / Alt+V", Description: "Page down/up"},
