@@ -64,7 +64,7 @@ Fast search across 15,000+ packages. The filter picker (`f`) combines installed,
 The Details panel shows much of what `brew info` does, without running it: caveats, license, tap, pinned and keg-only status, install date, runtime, build and optional dependencies, installed packages that require it, conflicts, and aliases. The go menu (`g`) opens a package's homepage, source, or GitHub definition, or shows `brew info`, `log`, `livecheck`, or `cat` in the Log.
 
 ### Fits Your Terminal
-Columns size themselves to the available width. When space runs short, Bold Brew trims padding and borders, shortens headings, hides the Details panel (press `Enter` for a popup, or `d` to toggle it), and lets you scroll the Version, Description, and Downloads columns with `h`/`l` while Type and Name stay put. Status messages appear at the bottom, each for at least three seconds.
+Columns size themselves to the available width. When space runs short, Bold Brew trims padding and borders, shortens headings, hides the Details panel (press `Enter` for a popup, or `D` to toggle it), and lets you scroll the Version, Description, and Downloads columns with `h`/`l` while Type and Name stay put. Status messages appear at the bottom, each for at least three seconds.
 
 ### Respects NO_COLOR
 Set `NO_COLOR=1` to turn colours off (see [no-color.org](https://no-color.org/)). Installed packages then show in bold, outdated versions underlined, and menu keys as `(g)`. The variable is passed on to `brew`, which also drops its colours.
@@ -186,7 +186,9 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 | Key | Action |
 |-----|--------|
 | `b` | Toggle borders (also hidden automatically on narrow terminals) |
-| `d` | Toggle the details panel (also hidden automatically on narrow terminals) |
+| `D` | Toggle the details panel (also hidden automatically on narrow terminals) |
+| `L` | Toggle the Log panel (it reappears when a command writes to it) |
+| `Alt+Up` / `Alt+Down` | Grow / shrink the Log |
 
 </details>
 

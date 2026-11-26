@@ -66,6 +66,7 @@ type InputService struct {
 	ActionRemoveAll     *InputAction
 	ActionToggleBorders *InputAction
 	ActionToggleDetails *InputAction
+	ActionToggleLog     *InputAction
 	ActionNextPanel     *InputAction
 	ActionPrevPanel     *InputAction
 	ActionShowDetails   *InputAction
@@ -114,8 +115,12 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 		Action: s.layout.ToggleBorders,
 	}
 	s.ActionToggleDetails = &InputAction{
-		Key: tcell.KeyRune, Rune: 'd', KeySlug: "d", Name: "Toggle details panel", Section: sectionView,
+		Key: tcell.KeyRune, Rune: 'D', KeySlug: "D", Name: "Toggle details panel", Section: sectionView,
 		Action: s.layout.ToggleDetails,
+	}
+	s.ActionToggleLog = &InputAction{
+		Key: tcell.KeyRune, Rune: 'L', KeySlug: "L", Name: "Toggle the Log panel", Section: sectionView,
+		Action: s.toggleLog,
 	}
 	s.ActionNextPanel = &InputAction{
 		Key: tcell.KeyTab, Action: func() { s.cyclePanel(1) },
@@ -140,7 +145,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.keyActions = []*InputAction{
 		s.ActionSearch, s.ActionGoMenu, s.ActionMenu, s.ActionFilterPicker, s.ActionSort,
 
-		s.ActionToggleBorders, s.ActionToggleDetails, s.ActionNextPanel, s.ActionPrevPanel,
+		s.ActionToggleBorders, s.ActionToggleDetails, s.ActionToggleLog, s.ActionNextPanel, s.ActionPrevPanel,
 		s.ActionShowDetails, s.ActionHelp, s.ActionBack, s.ActionQuit,
 	}
 
@@ -163,7 +168,10 @@ func (s *InputService) panels() []tview.Primitive {
 	if s.layout.DetailsVisible() {
 		panels = append(panels, s.layout.GetDetails().View())
 	}
-	return append(panels, s.layout.GetOutput().View())
+	if s.layout.LogVisible() {
+		panels = append(panels, s.layout.GetOutput().View())
+	}
+	return panels
 }
 
 // focusedPanel returns the index of the focused main panel, or -1 when focus
@@ -195,8 +203,9 @@ func (s *InputService) HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKe
 		return nil
 	}
 
-	// The details panel may have been hidden (narrow screen) while focused.
-	if !s.layout.DetailsVisible() && s.layout.GetDetails().View().HasFocus() {
+	// The details panel or Log may have been hidden while focused.
+	if (!s.layout.DetailsVisible() && s.layout.GetDetails().View().HasFocus()) ||
+		(!s.layout.LogVisible() && s.layout.GetOutput().View().HasFocus()) {
 		s.appService.GetApp().SetFocus(s.layout.GetTable().View())
 	}
 
@@ -209,6 +218,16 @@ func (s *InputService) HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKe
 			return nil
 		}
 		return event
+	}
+
+	// Alt+Up/Down grow and shrink the Log from any panel.
+	if event.Modifiers()&tcell.ModAlt != 0 && (event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown) {
+		if event.Key() == tcell.KeyUp {
+			s.layout.ResizeLog(1)
+		} else {
+			s.layout.ResizeLog(-1)
+		}
+		return nil
 	}
 
 	if translated, handled := s.handleNavigation(event, s.panels()[panel]); handled {
@@ -392,6 +411,15 @@ func (s *InputService) handleQuitEvent() {
 	}()
 }
 
+// toggleLog hides or shows the Log. Hiding it while it has focus returns
+// focus to the table.
+func (s *InputService) toggleLog() {
+	if s.layout.LogVisible() && s.layout.GetOutput().View().HasFocus() {
+		s.appService.GetApp().SetFocus(s.layout.GetTable().View())
+	}
+	s.layout.ToggleLog()
+}
+
 // helpSections builds the help screen content from the key bindings.
 func (s *InputService) helpSections() []components.HelpSection {
 	sections := []components.HelpSection{
@@ -404,6 +432,7 @@ func (s *InputService) helpSections() []components.HelpSection {
 			{Keys: "Ctrl+F/B, PgDn/PgUp", Description: "Page down/up"},
 			{Keys: "Ctrl+V / Alt+V", Description: "Page down/up"},
 			{Keys: "Tab / Shift+Tab", Description: "Next/previous panel"},
+			{Keys: "Alt+↑ / Alt+↓", Description: "Grow/shrink the Log"},
 			{Keys: "Enter", Description: "Show details (popup when hidden)"},
 			{Keys: "/", Description: "Focus search"},
 			{Keys: "Esc", Description: "Back to table, clear gd/gu, or quit"},

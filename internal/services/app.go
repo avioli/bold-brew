@@ -207,6 +207,16 @@ func (s *AppService) BuildApp() {
 		})
 	}()
 
+	// Anything written to the Log (commands, batch progress) shows it if it
+	// was hidden. The changed func runs on its own goroutine.
+	s.layout.GetOutput().View().SetChangedFunc(func() {
+		s.app.QueueUpdateDraw(func() {
+			if s.layout.GetOutput().View().GetText(false) != "" {
+				s.layout.ShowLog()
+			}
+		})
+	})
+
 	// "Required by" in the details panel comes from the dependency index.
 	s.layout.GetDetails().SetRequiredByFunc(func(name string) []string {
 		return s.dependencyIndex().installedDependents(name)

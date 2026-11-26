@@ -20,7 +20,9 @@ const (
 const (
 	widePadding    = 3
 	compactPadding = 1
-	outputHeight   = 5
+	outputHeight   = 5 // default Log height
+	minLogHeight   = 2
+	minMainHeight  = 6 // rows kept for the search line and package table
 )
 
 type LayoutInterface interface {
@@ -35,6 +37,12 @@ type LayoutInterface interface {
 	// ToggleDetails hides or shows the details panel (it is also hidden
 	// automatically on narrow screens).
 	ToggleDetails()
+	// ToggleLog hides or shows the Log panel; ShowLog shows it.
+	ToggleLog()
+	ShowLog()
+	// ResizeLog grows (delta > 0) or shrinks the Log when it is visible.
+	ResizeLog(delta int)
+	LogVisible() bool
 	// DetailsVisible reports whether the details panel is shown.
 	DetailsVisible() bool
 	// SetPackagesTitle sets the title of the package panel, e.g. "Installed Casks".
@@ -89,6 +97,9 @@ type Layout struct {
 	width, height int
 	bordersHidden bool // user preference
 	detailsHidden bool // user preference
+	logHidden     bool
+	logHeight     int
+	statusRow     *tview.Flex
 	bordersShown  bool // current state
 	detailsShown  bool
 	packagesTitle string
@@ -138,19 +149,60 @@ func (l *Layout) setupLayout() {
 		AddItem(l.details.View(), components.DetailsMinWidth, 0, false)
 
 	// Status line: messages on the left, short help on the right
-	statusRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+	l.statusRow = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(l.notifier.View(), 0, 1, false).
 		AddItem(l.legend.View(), l.legend.Width(), 0, false)
 
-	// Final layout: main content, output (full width), status line
-	l.grid.
-		SetRows(0, outputHeight, 1).
-		SetColumns(0).
-		SetBorders(true).
-		AddItem(l.mainContent, 0, 0, 1, 1, 0, 0, true).
-		AddItem(l.output.View(), 1, 0, 1, 1, 0, 0, false).
-		AddItem(statusRow, 2, 0, 1, 1, 0, 0, false)
+	l.logHeight = outputHeight
+	l.grid.SetColumns(0).SetBorders(true)
+	l.arrangeRows()
 }
+
+// arrangeRows lays out the grid: main content, the Log (when visible, full
+// width) and the status line. A hidden Log is left out entirely: a row of
+// size 0 would be a flexible row in tview, not an empty one.
+func (l *Layout) arrangeRows() {
+	l.grid.Clear()
+	l.grid.AddItem(l.mainContent, 0, 0, 1, 1, 0, 0, true)
+	if l.logHidden {
+		l.grid.SetRows(0, 1)
+		l.grid.AddItem(l.statusRow, 1, 0, 1, 1, 0, 0, false)
+		return
+	}
+	l.grid.SetRows(0, l.logHeight, 1)
+	l.grid.AddItem(l.output.View(), 1, 0, 1, 1, 0, 0, false)
+	l.grid.AddItem(l.statusRow, 2, 0, 1, 1, 0, 0, false)
+}
+
+// maxLogHeight leaves room for the package table, the status line and
+// borders.
+func (l *Layout) maxLogHeight() int {
+	if l.height == 0 {
+		return outputHeight
+	}
+	return max(l.height-minMainHeight-1-4, minLogHeight)
+}
+
+func (l *Layout) ToggleLog() {
+	l.logHidden = !l.logHidden
+	l.arrangeRows()
+}
+
+func (l *Layout) ShowLog() {
+	if l.logHidden {
+		l.ToggleLog()
+	}
+}
+
+func (l *Layout) ResizeLog(delta int) {
+	if l.logHidden {
+		return
+	}
+	l.logHeight = min(max(l.logHeight+delta, minLogHeight), l.maxLogHeight())
+	l.arrangeRows()
+}
+
+func (l *Layout) LogVisible() bool { return !l.logHidden }
 
 func (l *Layout) Setup() {
 	l.setupLayout()
@@ -198,6 +250,12 @@ func (l *Layout) Resize(width, height int) {
 	l.mainContent.ResizeItem(l.details.View(), detailsWidth, 0)
 
 	l.search.SetCompact(width <= CompactPadWidth)
+
+	// Keep the Log within bounds after the screen shrank.
+	if h := min(l.logHeight, l.maxLogHeight()); h != l.logHeight {
+		l.logHeight = h
+		l.arrangeRows()
+	}
 }
 
 func (l *Layout) DetailsVisible() bool { return l.detailsShown }
@@ -246,7 +304,9 @@ func (l *Layout) drawTitles(screen tcell.Screen) {
 	}
 
 	title(l.leftColumn, l.packagesTitle, l.table.View().HasFocus(), 1)
-	title(l.output.View(), titleOutput, l.output.View().HasFocus(), 1)
+	if !l.logHidden {
+		title(l.output.View(), titleOutput, l.output.View().HasFocus(), 1)
+	}
 	if !l.detailsShown {
 		return
 	}
