@@ -73,6 +73,7 @@ type InputService struct {
 	ActionToggleBorders  *InputAction
 	ActionNextPanel      *InputAction
 	ActionPrevPanel      *InputAction
+	ActionShowDetails    *InputAction
 	ActionHelp           *InputAction
 	ActionBack           *InputAction
 	ActionQuit           *InputAction
@@ -157,6 +158,9 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.ActionPrevPanel = &InputAction{
 		Key: tcell.KeyBacktab, Action: func() { s.cyclePanel(-1) },
 	}
+	s.ActionShowDetails = &InputAction{
+		Key: tcell.KeyEnter, Action: s.handleShowDetails,
+	}
 	s.ActionHelp = &InputAction{
 		Key: tcell.KeyRune, Rune: '?', Action: s.handleHelpEvent,
 	}
@@ -174,7 +178,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 		s.ActionSort, s.ActionInstall, s.ActionUpdate, s.ActionRemove,
 		s.ActionUpdateAll, s.ActionVulnScan, s.ActionExport,
 		s.ActionToggleBorders, s.ActionNextPanel, s.ActionPrevPanel,
-		s.ActionHelp, s.ActionBack, s.ActionQuit,
+		s.ActionShowDetails, s.ActionHelp, s.ActionBack, s.ActionQuit,
 	}
 
 	return s
@@ -308,6 +312,60 @@ func (s *InputService) scrollHalfPage(focus tview.Primitive, dir int) {
 	}
 }
 
+// handleShowDetails focuses the details panel, or shows the details in a
+// popup when the panel is hidden on a narrow screen.
+func (s *InputService) handleShowDetails() {
+	if s.focusedPanel() != 0 {
+		return // only from the table
+	}
+	if s.layout.DetailsVisible() {
+		s.appService.GetApp().SetFocus(s.layout.GetDetails().View())
+		return
+	}
+
+	row, _ := s.layout.GetTable().View().GetSelection()
+	if row <= 0 || row-1 >= len(*s.appService.filteredPackages) {
+		return
+	}
+
+	text := tview.NewTextView().
+		SetDynamicColors(true).
+		SetScrollable(true).
+		SetText(s.layout.GetDetails().View().GetText(false))
+	text.SetBorder(true).
+		SetBorderPadding(0, 0, 1, 1).
+		SetTitle(" Details ").
+		SetTitleAlign(tview.AlignLeft)
+
+	// Enter, q or Esc close; everything else (j/k, g/G, arrows) scrolls.
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEnter, event.Key() == tcell.KeyRune && event.Rune() == 'q':
+			s.closeOverlay()
+			return nil
+		case event.Key() == tcell.KeyCtrlN:
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Key() == tcell.KeyCtrlP:
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return event
+	})
+
+	popup := tview.NewFlex().
+		AddItem(nil, 1, 0, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 1, 0, false).
+			AddItem(text, 0, 1, true).
+			AddItem(nil, 1, 0, false),
+			0, 1, true).
+		AddItem(nil, 1, 0, false)
+
+	pages := tview.NewPages().
+		AddPage("main", s.layout.Root(), true, true).
+		AddPage("details", popup, true, true)
+	s.appService.GetApp().SetRoot(pages, true)
+}
+
 // closeOverlay returns from a modal, help or picker to the main layout.
 func (s *InputService) closeOverlay() {
 	s.appService.GetApp().SetRoot(s.layout.Root(), true)
@@ -345,6 +403,7 @@ func (s *InputService) helpSections() []components.HelpSection {
 			{Keys: "Ctrl+F/B, PgDn/PgUp", Description: "Page down/up"},
 			{Keys: "Ctrl+V / Alt+V", Description: "Page down/up"},
 			{Keys: "Tab / Shift+Tab", Description: "Next/previous panel"},
+			{Keys: "Enter", Description: "Show details (popup when hidden)"},
 			{Keys: "/", Description: "Focus search"},
 			{Keys: "Esc", Description: "Back to table, or quit"},
 			{Keys: "q", Description: "Quit"},
