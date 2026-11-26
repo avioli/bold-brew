@@ -109,9 +109,17 @@ var NewAppService = func() AppServiceInterface {
 
 func (s *AppService) GetApp() *tview.Application    { return s.app }
 func (s *AppService) GetLayout() ui.LayoutInterface { return s.layout }
-func (s *AppService) SetBrewfilePath(path string)   { s.brewfilePath = path }
-func (s *AppService) ExitLog() string               { return s.exitLog }
-func (s *AppService) IsBrewfileMode() bool          { return s.brewfilePath != "" }
+
+// SetBrewfilePath enables Brewfile mode, which starts in Brewfile order.
+func (s *AppService) SetBrewfilePath(path string) {
+	s.brewfilePath = path
+	if path != "" {
+		s.activeSort = models.SortBrewfile
+	}
+}
+
+func (s *AppService) ExitLog() string      { return s.exitLog }
+func (s *AppService) IsBrewfileMode() bool { return s.brewfilePath != "" }
 
 // outputWriter returns a thread-safe writer that streams to the output panel.
 func (s *AppService) outputWriter() *ui.ThreadSafeWriter {

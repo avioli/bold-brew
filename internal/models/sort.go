@@ -4,26 +4,37 @@ package models
 type SortMode int
 
 const (
-	SortNone        SortMode = iota // No explicit sort (preserves natural/API order)
+	SortByName      SortMode = iota // Alphabetical A-Z (the default)
 	SortByDownloads                 // Most downloaded first
-	SortByName                      // Alphabetical A-Z
 	SortByRank                      // Best 90 day analytics rank first
+	SortBrewfile                    // Brewfile order (Brewfile mode only)
 )
 
 func (s SortMode) String() string {
 	switch s {
 	case SortByDownloads:
 		return "Downloads"
-	case SortByName:
-		return "Name"
 	case SortByRank:
 		return "Rank"
+	case SortBrewfile:
+		return "Brewfile order"
 	default:
-		return "None"
+		return "Name"
 	}
 }
 
-// Next cycles to the next sort mode.
-func (s SortMode) Next() SortMode {
-	return (s + 1) % 4
+// Next cycles to the next sort mode: Name, Downloads, Rank, then Brewfile
+// order when brewfile is true.
+func (s SortMode) Next(brewfile bool) SortMode {
+	switch s {
+	case SortByName:
+		return SortByDownloads
+	case SortByDownloads:
+		return SortByRank
+	case SortByRank:
+		if brewfile {
+			return SortBrewfile
+		}
+	}
+	return SortByName
 }

@@ -99,7 +99,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 		Action: s.handleFilterPickerEvent,
 	}
 	s.ActionSort = &InputAction{
-		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Cycle sort (none, downloads, name, rank)", Section: sectionFilters,
+		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Cycle sort (name, downloads, rank)", Section: sectionFilters,
 		Action: s.handleSortEvent,
 	}
 	s.ActionInstallAll = &InputAction{

@@ -48,7 +48,7 @@ func (s *AppService) search(searchText string, scrollToTop bool) {
 }
 
 // applySortOrder sorts the list in place based on the active sort mode.
-// When SortNone, the list preserves its natural order (API/cache order).
+// SortBrewfile keeps the natural (Brewfile) order.
 func (s *AppService) applySortOrder(list []models.Package) {
 	switch s.activeSort {
 	case models.SortByDownloads:
@@ -56,7 +56,7 @@ func (s *AppService) applySortOrder(list []models.Package) {
 			return list[i].Analytics90dDownloads > list[j].Analytics90dDownloads
 		})
 	case models.SortByName:
-		sort.Slice(list, func(i, j int) bool {
+		sort.SliceStable(list, func(i, j int) bool {
 			return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name)
 		})
 	case models.SortByRank:
@@ -68,13 +68,13 @@ func (s *AppService) applySortOrder(list []models.Package) {
 			}
 			return a < b
 		})
-	default: // SortNone - no sorting
+	default: // SortBrewfile - keep Brewfile order
 	}
 }
 
 // CycleSortMode advances to the next sort mode and re-applies the search.
 func (s *AppService) CycleSortMode() models.SortMode {
-	s.activeSort = s.activeSort.Next()
+	s.activeSort = s.activeSort.Next(s.IsBrewfileMode())
 	s.search(s.layout.GetSearch().Field().GetText(), false)
 	return s.activeSort
 }

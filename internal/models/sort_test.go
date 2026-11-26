@@ -7,10 +7,10 @@ func TestSortMode_String(t *testing.T) {
 		mode SortMode
 		want string
 	}{
-		{SortNone, "None"},
-		{SortByDownloads, "Downloads"},
 		{SortByName, "Name"},
+		{SortByDownloads, "Downloads"},
 		{SortByRank, "Rank"},
+		{SortBrewfile, "Brewfile order"},
 	}
 
 	for _, tt := range tests {
@@ -22,18 +22,27 @@ func TestSortMode_String(t *testing.T) {
 
 func TestSortMode_Next(t *testing.T) {
 	tests := []struct {
-		mode SortMode
-		want SortMode
+		mode     SortMode
+		brewfile bool
+		want     SortMode
 	}{
-		{SortNone, SortByDownloads},
-		{SortByDownloads, SortByName},
-		{SortByName, SortByRank},
-		{SortByRank, SortNone},
+		{SortByName, false, SortByDownloads},
+		{SortByDownloads, false, SortByRank},
+		{SortByRank, false, SortByName},
+		{SortByRank, true, SortBrewfile},
+		{SortBrewfile, true, SortByName},
 	}
 
 	for _, tt := range tests {
-		if got := tt.mode.Next(); got != tt.want {
-			t.Errorf("SortMode(%d).Next() = %d, want %d", tt.mode, got, tt.want)
+		if got := tt.mode.Next(tt.brewfile); got != tt.want {
+			t.Errorf("SortMode(%d).Next(%v) = %d, want %d", tt.mode, tt.brewfile, got, tt.want)
 		}
+	}
+}
+
+func TestSortMode_DefaultIsName(t *testing.T) {
+	var s SortMode
+	if s != SortByName {
+		t.Errorf("zero SortMode = %v, want Name", s)
 	}
 }

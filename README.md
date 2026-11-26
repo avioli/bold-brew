@@ -157,7 +157,7 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 | Key | Action |
 |-----|--------|
 | `f` | Filter picker: combine Installed/Outdated/Leaves with Formulae/Casks |
-| `s` | Cycle sort (None, Downloads, Name, Rank) |
+| `s` | Cycle sort (Name, Downloads, Rank; plus Brewfile order in Brewfile mode) |
 
 ### Actions Menu (`a`)
 
