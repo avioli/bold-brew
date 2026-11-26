@@ -25,7 +25,10 @@ const helpFooter = " j/k to scroll, any other key to close "
 
 const (
 	helpKeyWidth = 22
-	helpBoxWidth = 64
+	// Box chrome around the text: borders (2) and padding (2 + 2).
+	helpChromeWidth = 6
+	// Key lines are "  <key padded to helpKeyWidth> <description>".
+	helpKeyIndent = 2
 )
 
 // HelpScreen displays a modal overlay with all keyboard shortcuts
@@ -50,7 +53,8 @@ func (h *HelpScreen) View() *tview.Pages {
 // Build creates the help screen as an overlay on top of the main content.
 // The box is at most maxHeight rows high (0 for no limit) and scrolls when
 // the content does not fit. It returns the pages and the scrollable text.
-func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, maxHeight int) (*tview.Pages, *tview.TextView) {
+// The box is as wide as its longest line, up to maxWidth (0 for no limit).
+func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, maxWidth, maxHeight int) (*tview.Pages, *tview.TextView) {
 	content, lines := h.buildHelpContent(sections)
 
 	textView := tview.NewTextView().
@@ -89,7 +93,7 @@ func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, 
 			AddItem(nil, 0, 1, false).
 			AddItem(frame, boxHeight, 0, true).
 			AddItem(nil, 0, 1, false),
-			helpBoxWidth, 0, true).
+			h.boxWidth(sections, maxWidth), 0, true).
 		AddItem(nil, 0, 1, false)
 
 	// Create pages with main content as background and help as overlay
@@ -98,6 +102,23 @@ func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, 
 		AddPage("help", centered, true, true)
 
 	return h.pages, textView
+}
+
+// boxWidth fits the longest line (and the footer hint) without wrapping.
+func (h *HelpScreen) boxWidth(sections []HelpSection, maxWidth int) int {
+	width := tview.TaggedStringWidth(tview.Escape(helpFooter)) + 2
+	for _, section := range sections {
+		width = max(width, tview.TaggedStringWidth(tview.Escape(section.Title)))
+		for _, k := range section.Keys {
+			key := max(helpKeyWidth, tview.TaggedStringWidth(tview.Escape(k.Keys)))
+			width = max(width, helpKeyIndent+key+1+tview.TaggedStringWidth(tview.Escape(k.Description)))
+		}
+	}
+	width += helpChromeWidth
+	if maxWidth > 0 {
+		width = min(width, maxWidth)
+	}
+	return width
 }
 
 // buildHelpContent generates the formatted help text and its line count.

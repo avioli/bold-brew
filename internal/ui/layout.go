@@ -39,6 +39,7 @@ type LayoutInterface interface {
 	DetailsVisible() bool
 	// SetPackagesTitle sets the title of the package panel, e.g. "Installed Casks".
 	SetPackagesTitle(title string)
+	Width() int
 	Height() int
 
 	GetSearch() *components.Search
@@ -159,6 +160,7 @@ func (l *Layout) Root() tview.Primitive {
 	return l.grid
 }
 
+func (l *Layout) Width() int  { return l.width }
 func (l *Layout) Height() int { return l.height }
 
 func (l *Layout) ToggleBorders() {

@@ -393,7 +393,7 @@ func (s *InputService) helpSections() []components.HelpSection {
 
 // handleHelpEvent shows the help screen with all keyboard shortcuts.
 func (s *InputService) handleHelpEvent() {
-	helpPages, text := s.layout.GetHelpScreen().Build(s.layout.Root(), s.helpSections(), s.layout.Height()-2)
+	helpPages, text := s.layout.GetHelpScreen().Build(s.layout.Root(), s.helpSections(), s.layout.Width()-2, s.layout.Height()-2)
 
 	// Scroll keys scroll the help; any other key closes it.
 	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
