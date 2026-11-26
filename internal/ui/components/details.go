@@ -23,6 +23,7 @@ type Details struct {
 	view        *tview.TextView
 	theme       *theme.Theme
 	inlineTitle bool
+	requiredBy  func(name string) []string
 }
 
 func NewDetails(theme *theme.Theme) *Details {
@@ -113,53 +114,72 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 	if pkg.Type == models.PackageTypeMas {
 		nameLabel = "App ID"
 	}
+	version := pkg.Version
+	var license, tap, extraStatus, autoUpdates string
+	switch {
+	case pkg.Formula != nil:
+		f := pkg.Formula
+		if f.Versions.Head != "" {
+			version += " (HEAD available)"
+		}
+		license, tap = f.License, f.Tap
+		if f.Pinned {
+			extraStatus += ", [blue]pinned[-]"
+		}
+		if f.KegOnly {
+			extraStatus += ", keg-only"
+		}
+	case pkg.Cask != nil:
+		tap = pkg.Cask.Tap
+		if pkg.Cask.AutoUpdates {
+			autoUpdates = "Yes (the app updates itself)"
+		}
+	}
+
 	basicInfo := fmt.Sprintf(
 		"[yellow::b]%s[-]\n%s\n"+
 			"[blue]• Type:[-] %s %s\n"+
 			"[blue]• %s:[-] %s\n"+
 			"[blue]• Display Name:[-] %s\n"+
 			"[blue]• Version:[-] %s\n"+
-			"[blue]• Status:[-] %s%s\n"+
+			"[blue]• Status:[-] %s%s%s\n"+
+			"%s%s%s"+
 			"[blue]• Homepage:[-] %s\n\n"+
 			"[yellow::b]Description[-]\n%s\n%s",
-		pkg.Label(), separator,
+		tview.Escape(pkg.Label()), separator,
 		typeTag, typeLabel,
-		nameLabel, pkg.Name,
-		pkg.DisplayName,
-		pkg.Version,
-		installedStatus, healthInline,
+		nameLabel, tview.Escape(pkg.Name),
+		tview.Escape(pkg.DisplayName),
+		tview.Escape(version),
+		installedStatus, extraStatus, healthInline,
+		bullet("License", tview.Escape(license)),
+		bullet("Tap", tview.Escape(tap)),
+		bullet("Auto-updates", autoUpdates),
 		pkg.Homepage,
 		separator,
-		pkg.Description,
+		tview.Escape(pkg.Description),
 	)
 
-	// Health section (only for deprecated/disabled)
-	healthSection := d.getHealthInfo(pkg)
-
-	// Installation details
-	installDetails := d.getPackageInstallationDetails(pkg)
-
-	// Dependencies (only for formulae)
-	dependenciesInfo := ""
-	if pkg.Type == models.PackageTypeFormula && pkg.Formula != nil {
-		dependenciesInfo = d.getDependenciesInfo(pkg.Formula)
+	// Sections in order of usefulness; empty ones are skipped.
+	parts := []string{
+		basicInfo,
+		d.getHealthInfo(pkg),
+		d.caveatsSection(pkg),
+		d.getVulnInfo(vulns),
+		d.getPackageInstallationDetails(pkg),
+		d.dependenciesSection(pkg),
+		d.requiredBySection(pkg),
+		d.conflictsSection(pkg),
+		d.aliasesSection(pkg),
+		d.getAnalyticsInfo(pkg),
 	}
-
-	vulnInfo := d.getVulnInfo(vulns)
-	analyticsInfo := d.getAnalyticsInfo(pkg)
-
-	parts := []string{basicInfo}
-	if healthSection != "" {
-		parts = append(parts, healthSection)
+	nonEmpty := parts[:0]
+	for _, p := range parts {
+		if p != "" {
+			nonEmpty = append(nonEmpty, p)
+		}
 	}
-	if vulnInfo != "" {
-		parts = append(parts, vulnInfo)
-	}
-	parts = append(parts, installDetails)
-	if dependenciesInfo != "" {
-		parts = append(parts, dependenciesInfo)
-	}
-	parts = append(parts, analyticsInfo)
+	parts = nonEmpty
 
 	d.view.SetText(strings.Join(parts, "\n\n"))
 }
@@ -245,17 +265,28 @@ func (d *Details) getPackageInstallationDetails(pkg *models.Package) string {
 			installedAsDependency = "Yes"
 		}
 
+		inst := pkg.Formula.Installed[0]
+		source := "Bottle"
+		if !inst.PouredFromBottle {
+			source = "Built from source"
+		}
+		extra := bullet("Installed on", formatDate(inst.Time)) + bullet("Installed from", source)
+		if pkg.Formula.KegOnly {
+			extra += bullet("Keg-only", tview.Escape(kegOnlyReason(pkg.Formula.KegOnlyReason)))
+		}
+
 		return fmt.Sprintf(
 			"[yellow::b]Installation Details[-]\n%s\n"+
 				"[blue]• Path:[-] %s\n"+
 				"[blue]• Installed on request:[-] %s\n"+
 				"[blue]• Installed as dependency:[-] %s\n"+
-				"[blue]• Installed version:[-] %s",
+				"[blue]• Installed version:[-] %s\n%s",
 			separator,
 			packagePrefix,
 			installedOnRequest,
 			installedAsDependency,
-			pkg.Formula.Installed[0].Version,
+			inst.Version,
+			strings.TrimSuffix(extra, "\n"),
 		)
 	}
 
@@ -266,40 +297,22 @@ func (d *Details) getPackageInstallationDetails(pkg *models.Package) string {
 			installedVersion = *pkg.Cask.Installed
 		}
 
+		installedOn := ""
+		if pkg.Cask.InstalledTime != nil {
+			installedOn = bullet("Installed on", formatDate(*pkg.Cask.InstalledTime))
+		}
+
 		return fmt.Sprintf(
 			"[yellow::b]Installation Details[-]\n%s\n"+
 				"[blue]• Type:[-] Desktop Application\n"+
-				"[blue]• Installed version:[-] %s",
+				"[blue]• Installed version:[-] %s%s",
 			separator,
 			installedVersion,
+			strings.TrimSuffix("\n"+installedOn, "\n"),
 		)
 	}
 
 	return fmt.Sprintf("[yellow::b]Installation[-]\n%s\nInstalled", separator)
-}
-
-func (d *Details) getDependenciesInfo(info *models.Formula) string {
-	separator := "[dim]────────────────────────[-]"
-	title := fmt.Sprintf("[yellow::b]Dependencies[-]\n%s\n", separator)
-
-	if len(info.Dependencies) == 0 {
-		return title + "No dependencies"
-	}
-
-	// Format dependencies in multiple columns or with separators
-	deps := ""
-	for i, dep := range info.Dependencies {
-		deps += dep
-		if i < len(info.Dependencies)-1 {
-			if (i+1)%3 == 0 {
-				deps += "\n"
-			} else {
-				deps += ", "
-			}
-		}
-	}
-
-	return title + deps
 }
 
 func (d *Details) getAnalyticsInfo(pkg *models.Package) string {

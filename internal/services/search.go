@@ -104,7 +104,6 @@ func (s *AppService) forceRefreshResults() {
 	// If in Brewfile mode, load tap packages and verify installed status
 	s.mu.Lock()
 	s.packages = newPackages
-	s.deps = nil // rebuilt on next use
 
 	if s.IsBrewfileMode() {
 		s.fetchTapPackages()
@@ -124,6 +123,7 @@ func (s *AppService) forceRefreshResults() {
 		*s.filteredPackages = *s.packages
 	}
 	s.mu.Unlock()
+	s.resetDependencyIndex()
 
 	s.app.QueueUpdateDraw(func() {
 		s.search(s.layout.GetSearch().Field().GetText(), false)

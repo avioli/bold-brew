@@ -43,6 +43,7 @@ type AppService struct {
 	activeFilter     PackageFilter
 	relation         *relationFilter // dependency/dependent filter, overrides activeFilter
 	deps             *depIndex       // built lazily from packages
+	depsMu           sync.Mutex      // protects deps (not mu: callers may hold mu)
 	activeSort       models.SortMode
 	brewVersion      string
 
@@ -191,6 +192,11 @@ func (s *AppService) BuildApp() {
 			s.layout.GetNotifier().ShowWarning(fmt.Sprintf("%s %s: new version available: %s", AppName, AppVersion, latestVersion))
 		})
 	}()
+
+	// "Required by" in the details panel comes from the dependency index.
+	s.layout.GetDetails().SetRequiredByFunc(func(name string) []string {
+		return s.dependencyIndex().installedDependents(name)
+	})
 
 	// Table handler to update the details view when a table row is selected
 	tableSelectionChangedFunc := func(row, _ int) {

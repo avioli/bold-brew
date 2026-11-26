@@ -83,8 +83,17 @@ type relationFilter struct {
 
 // depIndex returns the dependency index, building it on first use.
 func (s *AppService) dependencyIndex() *depIndex {
+	s.depsMu.Lock()
+	defer s.depsMu.Unlock()
 	if s.deps == nil {
 		s.deps = newDepIndex(*s.packages)
 	}
 	return s.deps
+}
+
+// resetDependencyIndex drops the index after package data changed.
+func (s *AppService) resetDependencyIndex() {
+	s.depsMu.Lock()
+	defer s.depsMu.Unlock()
+	s.deps = nil
 }
