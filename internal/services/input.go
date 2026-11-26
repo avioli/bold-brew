@@ -362,6 +362,9 @@ func (s *InputService) closeOverlay() {
 // handleBack is called on Esc: from a side panel go back to the table, from
 // the table quit.
 func (s *InputService) handleBack() {
+	if s.focusedPanel() == 0 && s.clearRelationFilter() {
+		return
+	}
 	if s.focusedPanel() > 0 {
 		s.appService.GetApp().SetFocus(s.layout.GetTable().View())
 		return
@@ -393,7 +396,7 @@ func (s *InputService) helpSections() []components.HelpSection {
 			{Keys: "Tab / Shift+Tab", Description: "Next/previous panel"},
 			{Keys: "Enter", Description: "Show details (popup when hidden)"},
 			{Keys: "/", Description: "Focus search"},
-			{Keys: "Esc", Description: "Back to table, or quit"},
+			{Keys: "Esc", Description: "Back to table, clear gd/gu, or quit"},
 			{Keys: "q", Description: "Quit"},
 			{Keys: "?", Description: "This help"},
 		}},
@@ -454,6 +457,12 @@ func (s *InputService) applyFilter() {
 
 // updateFilterUI updates the search label based on the current filter state.
 func (s *InputService) updateFilterUI() {
+	if r := s.appService.relation; r != nil {
+		s.layout.GetSearch().Field().SetLabel(tview.Escape("Search (" + r.title + "): "))
+		s.layout.SetPackagesTitle(r.title)
+		return
+	}
+
 	label := s.appService.activeFilter.Label()
 	switch {
 	case s.appService.IsBrewfileMode() && label != "":
@@ -470,6 +479,9 @@ func (s *InputService) updateFilterUI() {
 // handleFilterPickerEvent shows a picker to combine a status filter
 // (installed, outdated, leaves) with a kind filter (formulae, casks).
 func (s *InputService) handleFilterPickerEvent() {
+	// The picker takes over from a dependency filter.
+	s.clearRelationFilter()
+
 	type option struct {
 		label    string
 		shortcut rune

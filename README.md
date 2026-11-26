@@ -131,7 +131,13 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | `gg` | Go to top |
 | `gh` | Open the homepage (`brew home`) |
 | `gs` | Open the source repository (`brew source`, formulae, Homebrew 7+) |
+| `gI` | Open the formula or cask definition on GitHub (`brew info --github`) |
 | `gi` | Show `brew info` in the Log |
+| `gd` | Filter to the dependencies, recursively (like `brew deps`); `Esc` clears |
+| `gu` | Filter to the packages that depend on it (like `brew uses`); `Esc` clears |
+| `gl` | Show `brew log` in the Log |
+| `gL` | Show `brew livecheck` in the Log |
+| `gC` | Show `brew cat` (the formula or cask source) in the Log |
 
 ### Filters and Sorting
 

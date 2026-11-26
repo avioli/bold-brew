@@ -41,6 +41,8 @@ type AppService struct {
 	packages         *[]models.Package
 	filteredPackages *[]models.Package
 	activeFilter     PackageFilter
+	relation         *relationFilter // dependency/dependent filter, overrides activeFilter
+	deps             *depIndex       // built lazily from packages
 	activeSort       models.SortMode
 	brewVersion      string
 

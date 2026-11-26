@@ -72,6 +72,16 @@ func (s *AppService) CycleSortMode() models.SortMode {
 
 // applyFilter filters packages based on the active filter.
 func (s *AppService) applyFilter(sourceList *[]models.Package) *[]models.Package {
+	if s.relation != nil {
+		filteredSource := &[]models.Package{}
+		for _, info := range *sourceList {
+			if s.relation.members[info.Name] {
+				*filteredSource = append(*filteredSource, info)
+			}
+		}
+		return filteredSource
+	}
+
 	if s.activeFilter.IsNone() {
 		return sourceList
 	}
@@ -94,6 +104,7 @@ func (s *AppService) forceRefreshResults() {
 	// If in Brewfile mode, load tap packages and verify installed status
 	s.mu.Lock()
 	s.packages = newPackages
+	s.deps = nil // rebuilt on next use
 
 	if s.IsBrewfileMode() {
 		s.fetchTapPackages()

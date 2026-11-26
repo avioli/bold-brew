@@ -27,7 +27,13 @@ func (s *InputService) goMenuItems(prevFocus tview.Primitive) []menuItem {
 		{'g', "Go to top", func() { s.goToTop(prevFocus) }},
 		{'h', "Open homepage", s.openHomepage},
 		{'s', "Open source repository", s.openSource},
-		{'i', "Show brew info in the Log", s.showBrewInfo},
+		{'I', "Open formula/cask on GitHub", func() { s.brewToBrowser("Opening GitHub page of", "info", "--github") }},
+		{'i', "Show brew info in the Log", func() { s.brewToLog("info") }},
+		{'d', "Filter: dependencies (recursive)", s.showDependencies},
+		{'u', "Filter: packages that use this", s.showDependents},
+		{'l', "Show brew log in the Log", func() { s.brewToLog("log") }},
+		{'L', "Show brew livecheck in the Log", func() { s.brewToLog("livecheck") }},
+		{'C', "Show brew cat (source) in the Log", func() { s.brewToLog("cat") }},
 	}
 }
 
@@ -171,18 +177,83 @@ func (s *InputService) openSource() {
 		brewCommand("source", pkg.Name), false) // #nosec G204
 }
 
-// showBrewInfo runs `brew info` for the selected package into the Log.
-func (s *InputService) showBrewInfo() {
+// selectedBrewPackage returns the selected package if brew commands apply to
+// it, warning otherwise.
+func (s *InputService) selectedBrewPackage(what string) *models.Package {
+	pkg := s.selectedPackage()
+	if pkg == nil {
+		return nil
+	}
+	if !isBrewPackage(pkg) {
+		s.layout.GetNotifier().ShowWarning(what + " only works for Homebrew packages")
+		return nil
+	}
+	return pkg
+}
+
+// brewToLog runs `brew <command> --formula|--cask <name>` into the Log.
+func (s *InputService) brewToLog(command string) {
+	pkg := s.selectedBrewPackage("brew " + command)
+	if pkg == nil {
+		return
+	}
+	s.runInBackground(fmt.Sprintf("brew %s %s", command, pkg.Name),
+		brewCommand(command, brewTypeFlag(pkg), pkg.Name), true) // #nosec G204
+}
+
+// brewToBrowser runs a brew command that opens a browser page.
+func (s *InputService) brewToBrowser(what string, args ...string) {
+	pkg := s.selectedBrewPackage("brew " + args[0])
+	if pkg == nil {
+		return
+	}
+	args = append(args, brewTypeFlag(pkg), pkg.Name)
+	s.runInBackground(fmt.Sprintf("%s %s", what, pkg.Label()), brewCommand(args...), false) // #nosec G204
+}
+
+// showDependencies filters the list to the selected package's dependencies,
+// recursively (like brew deps).
+func (s *InputService) showDependencies() {
 	pkg := s.selectedPackage()
 	if pkg == nil {
 		return
 	}
-	if !isBrewPackage(pkg) {
-		s.layout.GetNotifier().ShowWarning("brew info only works for Homebrew packages")
+	members := s.appService.dependencyIndex().dependencies(pkg.Name)
+	s.setRelationFilter(members, fmt.Sprintf("Dependencies of %s", pkg.Name),
+		fmt.Sprintf("%s has no dependencies", pkg.Name))
+}
+
+// showDependents filters the list to the packages that directly depend on
+// the selected package (like brew uses).
+func (s *InputService) showDependents() {
+	pkg := s.selectedPackage()
+	if pkg == nil {
 		return
 	}
-	s.runInBackground(fmt.Sprintf("brew info %s", pkg.Name),
-		brewCommand("info", brewTypeFlag(pkg), pkg.Name), true) // #nosec G204
+	members := s.appService.dependencyIndex().dependents(pkg.Name)
+	s.setRelationFilter(members, fmt.Sprintf("Used by %s", pkg.Name),
+		fmt.Sprintf("Nothing depends on %s", pkg.Name))
+}
+
+func (s *InputService) setRelationFilter(members map[string]bool, title, emptyMessage string) {
+	if len(members) == 0 {
+		s.layout.GetNotifier().ShowWarning(emptyMessage)
+		return
+	}
+	s.appService.relation = &relationFilter{title: title, members: members}
+	s.applyFilter()
+	s.layout.GetNotifier().ShowInfo(title + " (Esc to clear)")
+}
+
+// clearRelationFilter removes a dependency filter. It reports whether one
+// was set.
+func (s *InputService) clearRelationFilter() bool {
+	if s.appService.relation == nil {
+		return false
+	}
+	s.appService.relation = nil
+	s.applyFilter()
+	return true
 }
 
 // runInBackground runs a command, streaming its output to the Log, and
