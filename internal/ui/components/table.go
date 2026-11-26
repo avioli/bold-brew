@@ -27,7 +27,13 @@ const (
 	clipVersionWidth = 10 // Version may be clipped down to this
 	minDescWidth     = 11 // len("Description"); Description prefers at least this
 	lastDescWidth    = 5  // ...but shows down to this rather than hiding
-	sortIndicator    = " ▼"
+	readDescWidth    = 20 // Description keeps this much next to Downloads
+
+	// Downloads only shows at its natural position (offset 0) from this
+	// table width. That is a 147 column screen with the details panel, or
+	// 106 without it (borders, padding and the 37 column panel included).
+	downloadsComfortWidth = 102
+	sortIndicator         = " ▼"
 )
 
 // Row is the display data for one package row. Text fields are plain text
@@ -71,10 +77,12 @@ func headerText(col int, label string, sortColumn int) string {
 // fitColumns lays out the columns in the given width.
 //
 //  1. Every column gets its minimum: Type 1 ("T"/"F"), Name up to 20, Version
-//     up to 10, Description 11, Downloads its digits (header "Dl").
+//     up to 10, Description 20 next to Downloads and otherwise 11 (5 as a
+//     last resort), Downloads its digits (header "Dl").
 //  2. Type and Name are always shown. Version, Description and Downloads form
 //     a window, starting at offset, of as many columns as fit at their
-//     minimum. Description is squeezed down to 5 before it is dropped.
+//     minimum. At offset 0, Downloads needs a table at least
+//     downloadsComfortWidth wide; scrolling right can still reveal it.
 //  3. Leftover space goes, in order, to Version (up to its content), Type
 //     ("Type"/"[F]"), Downloads (header "Downloads"), Name (up to 32) and the
 //     rest to Description.
@@ -109,20 +117,40 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 	avail := width - (minW[ColType] + 1) - (minW[ColName] + 1)
 
 	// window returns the scrollable columns that fit from offset o, with
-	// their widths, and the space they use.
+	// their widths, and the space they use. Description keeps 20 columns
+	// when Downloads shows next to it; without Downloads it may shrink to 11,
+	// or to 5 as a last resort.
 	window := func(o int) (cols, widths []int, used int) {
-		for _, col := range scrollable[o:] {
-			cw := minW[col]
-			if col == ColDescription && used+cw+1 > avail {
-				cw = avail - used - 1
-				if cw < lastDescWidth {
-					break
-				}
-			}
-			if used+cw+1 > avail {
-				break
-			}
+		add := func(col, cw int) {
 			cols, widths, used = append(cols, col), append(widths, cw), used+cw+1
+		}
+		dlAllowed := o > 0 || width >= downloadsComfortWidth
+		for _, col := range scrollable[o:] {
+			left := avail - used
+			switch col {
+			case ColDescription:
+				if dlAllowed && readDescWidth+1+minW[ColDownloads]+1 <= left {
+					add(ColDescription, readDescWidth)
+					add(ColDownloads, minW[ColDownloads])
+					return cols, widths, used
+				}
+				cw := min(minW[col], left-1)
+				if cw < lastDescWidth {
+					return cols, widths, used
+				}
+				add(col, cw)
+				return cols, widths, used // Downloads did not fit beside it
+			case ColDownloads:
+				if !dlAllowed || minW[col]+1 > left {
+					return cols, widths, used
+				}
+				add(col, minW[col])
+			default:
+				if minW[col]+1 > left {
+					return cols, widths, used
+				}
+				add(col, minW[col])
+			}
 		}
 		return cols, widths, used
 	}

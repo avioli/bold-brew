@@ -18,16 +18,20 @@ func TestFitColumnsWindows(t *testing.T) {
 		want      []int
 		maxOffset int
 	}{
-		{"wide: all columns, nothing scrolls", 120, 0,
+		{"comfortable (147 screen with details, 106 without): all columns", downloadsComfortWidth, 0,
 			[]int{ColType, ColName, ColVersion, ColDescription, ColDownloads}, 0},
 		{"wide: scrolling right is a no-op", 120, 1,
 			[]int{ColType, ColName, ColVersion, ColDescription, ColDownloads}, 0},
-		{"medium: version and description", 50, 0,
+		{"just below comfortable: Downloads hidden at first", downloadsComfortWidth - 1, 0,
 			[]int{ColType, ColName, ColVersion, ColDescription}, 1},
-		{"medium: scrolled to description and downloads", 50, 1,
+		{"just below comfortable: scrolled right shows Downloads", downloadsComfortWidth - 1, 1,
 			[]int{ColType, ColName, ColDescription, ColDownloads}, 1},
-		{"medium: offset clamps at the rightmost position", 50, 5,
+		{"medium: offset clamps at the rightmost position", 90, 5,
 			[]int{ColType, ColName, ColDescription, ColDownloads}, 1},
+		{"small: Description too narrow to share with Downloads", 50, 0,
+			[]int{ColType, ColName, ColVersion, ColDescription}, 2},
+		{"small: description alone", 50, 1, []int{ColType, ColName, ColDescription}, 2},
+		{"small: downloads alone", 50, 2, []int{ColType, ColName, ColDownloads}, 2},
 		{"narrow: version only", 36, 0, []int{ColType, ColName, ColVersion}, 2},
 		{"narrow: description only", 36, 1, []int{ColType, ColName, ColDescription}, 2},
 		{"narrow: downloads only", 36, 2, []int{ColType, ColName, ColDownloads}, 2},
@@ -59,6 +63,13 @@ func TestFitColumnsNeverOverflows(t *testing.T) {
 			if r.columns[0] != ColType || r.columns[1] != ColName {
 				t.Fatalf("width %d offset %d: Type and Name must be frozen, got %v", width, offset, r.columns)
 			}
+			shows := map[int]bool{}
+			for _, col := range r.columns {
+				shows[col] = true
+			}
+			if shows[ColDownloads] && shows[ColDescription] && r.widths[ColDescription] < readDescWidth {
+				t.Fatalf("width %d offset %d: Description %d next to Downloads", width, offset, r.widths[ColDescription])
+			}
 			if r.widths[ColName] < clipNameWidth {
 				t.Fatalf("width %d: Name clipped below %d", width, clipNameWidth)
 			}
@@ -75,8 +86,8 @@ func TestFitColumnsCompactHeaders(t *testing.T) {
 		t.Errorf("wide: Version width = %d, want %d", wide.widths[ColVersion], maxVersionWidth)
 	}
 
-	// Just enough for all columns at their minimum.
-	tight := fitColumns(23+11+12+8, typicalInput, 0)
+	// Scrolled right, with just enough for Description (20) and Downloads (7).
+	tight := fitColumns(23+21+8, typicalInput, 1)
 	if !tight.compact || tight.headers[ColType] != "T" || tight.headers[ColDownloads] != "Dl" {
 		t.Errorf("tight: compact=%v headers=%q/%q", tight.compact, tight.headers[ColType], tight.headers[ColDownloads])
 	}
