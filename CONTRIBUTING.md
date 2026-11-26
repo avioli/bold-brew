@@ -64,13 +64,18 @@ bold-brew/
 │   │   ├── package.go       # Unified Package type (formulae, casks, MAS)
 │   │   ├── formula.go       # Homebrew formula JSON structure
 │   │   ├── cask.go          # Homebrew cask JSON structure
+│   │   ├── relations.go     # Dependency helpers, lenient cask depends_on decoding
 │   │   ├── sort.go          # Sort mode enum
 │   │   └── vulnerability.go # CVE vulnerability model
 │   ├── services/            # Business logic
 │   │   ├── app.go           # Application orchestrator and state
 │   │   ├── brew.go          # Homebrew command execution
 │   │   ├── dataprovider.go  # Data fetching, caching, and merging
-│   │   ├── input.go         # Keyboard event handlers
+│   │   ├── input.go         # Key bindings, navigation, help, filter picker
+│   │   ├── goto.go          # g (go) menu and popup menu helper
+│   │   ├── actions.go       # a (actions) menu: brew pin, link, services, ...
+│   │   ├── filter.go        # Status + kind package filter
+│   │   ├── deps.go          # Dependency index for gd/gu and "Required By"
 │   │   ├── search.go        # Search, filter, and sort logic
 │   │   ├── brewfile.go      # Brewfile parsing and loading
 │   │   ├── export.go        # Brewfile export generation
@@ -81,9 +86,9 @@ bold-brew/
 │   │   ├── command.go       # Streaming command executor
 │   │   └── selfupdate.go    # Version check
 │   └── ui/                  # Terminal UI layer
-│       ├── layout.go        # Grid layout orchestration
+│       ├── layout.go        # Grid layout, width breakpoints, border titles
 │       ├── writer.go        # Thread-safe io.Writer for tview
-│       ├── components/      # UI components (table, details, help, etc.)
+│       ├── components/      # UI components (table with column fitting, details, help, etc.)
 │       └── theme/           # Color theme definitions
 ├── .github/workflows/       # CI/CD (quality, security, release, test-install)
 ├── site/                    # Website source (bold-brew.com)

@@ -55,10 +55,16 @@ Bold Brew is the **official Terminal UI** for managing Homebrew in [**Project Bl
 ## Features
 
 ### Package Management
-Manage **Homebrew formulae**, **casks**, **Flatpak**, and **Mac App Store** apps from one interface. Install, update, and remove packages with confirmation dialogs and real-time streaming output.
+Manage **Homebrew formulae**, **casks**, **Flatpak**, and **Mac App Store** apps from one interface. The actions menu (`a`) installs, updates, removes, reinstalls, fetches, pins, links, and starts or stops services, with confirmation dialogs and output streamed to the Log panel.
 
 ### Discovery and Filtering
-Fast search across 15,000+ packages. Filter by installed, outdated, or leaves, combined with casks or formulae. Sort by download popularity or name. See type indicators `[F]` `[C]` `[M]` at a glance.
+Fast search across 15,000+ packages. The filter picker (`f`) combines installed, outdated, or leaves with formulae or casks, and the panel title follows along ("Installed Casks"). Jump to a package's dependencies (`gd`) or to what depends on it (`gu`). Sort by download popularity or name. See type indicators `[F]` `[C]` `[M]` at a glance.
+
+### Details at a Glance
+The Details panel shows much of what `brew info` does, without running it: caveats, license, tap, pinned and keg-only status, install date, runtime, build and optional dependencies, installed packages that require it, conflicts, and aliases. The go menu (`g`) opens a package's homepage, source, or GitHub definition, or shows `brew info`, `log`, `livecheck`, or `cat` in the Log.
+
+### Fits Your Terminal
+Columns size themselves to the available width. When space runs short, Bold Brew trims padding and borders, shortens headings, hides the Details panel (press `Enter` for a popup, or `d` to toggle it), and lets you scroll the Version, Description, and Downloads columns with `h`/`l` while Type and Name stay put. Status messages appear at the bottom, each for at least three seconds.
 
 ### Brewfile Workflows
 Load Brewfiles from local paths or remote URLs. Batch install/remove entire collections. Export your installed packages to a `~/Brewfile` with one keystroke. Supports `brew`, `cask`, `tap`, `mas`, and `flatpak` entries.
@@ -103,6 +109,8 @@ bbrew -f https://raw.githubusercontent.com/user/repo/main/Brewfile
 
 See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K8s, etc.).
 
+Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for the go menu, and `f` for filters.
+
 ---
 
 <details>
@@ -115,12 +123,12 @@ See the `examples/` directory for ready-to-use Brewfiles (dev tools, AI tools, K
 | `/` | Search packages |
 | `Up/Down`, `j/k`, `Ctrl+N/P` | Move down/up |
 | `gg`/`G`, `Home/End`, `Alt+<`/`Alt+>` | Go to top/bottom |
-| `Left/Right`, `h/l` | Scroll the Version, Description and Downloads columns when they do not all fit (Type and Name stay) |
+| `Left/Right`, `h/l` | Scroll columns when they do not all fit (Type and Name stay) |
 | `Ctrl+D/U` | Half page down/up |
 | `Ctrl+F/B`, `PgDn/PgUp`, `Ctrl+V`/`Alt+V` | Page down/up |
-| `Tab` / `Shift+Tab` | Switch active panel (table, details, output) |
+| `Tab` / `Shift+Tab` | Switch active panel (table, details, log) |
 | `Enter` | Show details (as a popup when the panel is hidden) |
-| `Esc` | Back to table; quit from the table |
+| `Esc` | Back to table; clear a `gd`/`gu` filter; quit from the table |
 | `?` | Help screen |
 | `q` | Quit |
 
