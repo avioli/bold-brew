@@ -39,7 +39,6 @@ func NewDetails(theme *theme.Theme) *Details {
 		borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
 		titleStyle := tcell.StyleDefault.Foreground(theme.TitleColor)
 		if details.view.HasFocus() {
-			borderStyle = tcell.StyleDefault.Foreground(theme.TitleColor)
 			titleStyle = titleStyle.Reverse(true)
 		}
 		for row := y; row < y+height; row++ {

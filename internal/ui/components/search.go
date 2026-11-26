@@ -54,11 +54,17 @@ func (s *Search) SetCompact(compact bool) {
 }
 
 func (s *Search) renderCounter() {
-	if s.compact {
+	// Only mention the filtered count when something is filtered out.
+	switch {
+	case s.filtered == s.total && s.compact:
+		s.counter.SetText(fmt.Sprintf("%d", s.total))
+	case s.filtered == s.total:
+		s.counter.SetText(fmt.Sprintf("Total: %d", s.total))
+	case s.compact:
 		s.counter.SetText(fmt.Sprintf("%d/%d", s.filtered, s.total))
-		return
+	default:
+		s.counter.SetText(fmt.Sprintf("Filtered: %d | Total: %d", s.filtered, s.total))
 	}
-	s.counter.SetText(fmt.Sprintf("Filtered: %d | Total: %d", s.filtered, s.total))
 }
 
 func (s *Search) Field() *tview.InputField {

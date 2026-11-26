@@ -75,6 +75,26 @@ func (f PackageFilter) Label() string {
 	}
 }
 
+// Title is the package panel heading for the filter, e.g. "Formulas",
+// "Installed Casks", "Outdated Formulas & Casks" or "Cask Leaves".
+func (f PackageFilter) Title() string {
+	kind := map[KindFilter]string{
+		KindAll: "Formulas & Casks", KindFormulae: "Formulas", KindCasks: "Casks",
+	}[f.Kind]
+
+	switch f.Status {
+	case StatusInstalled:
+		return "Installed " + kind
+	case StatusOutdated:
+		return "Outdated " + kind
+	case StatusLeaves:
+		return map[KindFilter]string{
+			KindAll: "Leaves", KindFormulae: "Formula Leaves", KindCasks: "Cask Leaves",
+		}[f.Kind]
+	}
+	return kind
+}
+
 // ToggleStatus sets the status filter, or clears it if it is already set.
 func (f *PackageFilter) ToggleStatus(status StatusFilter) {
 	if f.Status == status {

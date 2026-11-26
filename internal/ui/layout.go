@@ -15,6 +15,7 @@ const (
 	CompactPadWidth    = 120 // shrink frame padding, short counter label
 	CompactTypeWidth   = 100 // Type column becomes "T" with "F"/"C"
 	NoBordersWidth     = 90  // drop the outer and row borders
+	HideDetailsWidth   = 80  // hide the details panel
 )
 
 const (
@@ -32,6 +33,10 @@ type LayoutInterface interface {
 	// ToggleBorders hides or shows the borders (they are also hidden
 	// automatically on narrow screens).
 	ToggleBorders()
+	// DetailsVisible reports whether the details panel is shown.
+	DetailsVisible() bool
+	// SetPackagesTitle sets the title of the package panel, e.g. "Installed Casks".
+	SetPackagesTitle(title string)
 	Height() int
 
 	GetSearch() *components.Search
@@ -46,9 +51,9 @@ type LayoutInterface interface {
 
 // Panel titles drawn on the outer border.
 const (
-	titlePackages = "Formulas & Casks"
-	titleDetails  = "Details"
-	titleOutput   = "Log"
+	titlePackagesDefault = "Formulas & Casks"
+	titleDetails         = "Details"
+	titleOutput          = "Log"
 )
 
 // titledGrid draws panel titles onto the grid's borders after the grid itself.
@@ -81,22 +86,25 @@ type Layout struct {
 	width, height int
 	bordersHidden bool // user preference
 	bordersShown  bool // current state
+	detailsShown  bool
+	packagesTitle string
 	dirty         bool
 	theme         *theme.Theme
 }
 
 func NewLayout(t *theme.Theme) LayoutInterface {
 	l := &Layout{
-		theme:      t,
-		search:     components.NewSearch(t),
-		table:      components.NewTable(t),
-		details:    components.NewDetails(t),
-		output:     components.NewOutput(t),
-		legend:     components.NewLegend(t),
-		notifier:   components.NewNotifier(t),
-		modal:      components.NewModal(t),
-		helpScreen: components.NewHelpScreen(t),
-		dirty:      true,
+		theme:         t,
+		search:        components.NewSearch(t),
+		table:         components.NewTable(t),
+		details:       components.NewDetails(t),
+		output:        components.NewOutput(t),
+		legend:        components.NewLegend(t),
+		notifier:      components.NewNotifier(t),
+		modal:         components.NewModal(t),
+		helpScreen:    components.NewHelpScreen(t),
+		dirty:         true,
+		packagesTitle: titlePackagesDefault,
 	}
 	l.grid = &titledGrid{Grid: tview.NewGrid(), layout: l}
 	return l
@@ -172,11 +180,25 @@ func (l *Layout) Resize(width, height int) {
 	l.filtersArea.SetBorders(0, 0, 0, 0, pad, pad)
 	l.tableFrame.SetBorders(0, 0, 0, 0, pad, pad)
 
-	l.mainContent.ResizeItem(l.details.View(), max(components.DetailsMinWidth, width/4), 0)
+	l.detailsShown = width > HideDetailsWidth
+	detailsWidth := 0
+	if l.detailsShown {
+		detailsWidth = max(components.DetailsMinWidth, width/4)
+	}
+	l.mainContent.ResizeItem(l.details.View(), detailsWidth, 0)
 
 	l.search.SetCompact(width <= CompactPadWidth)
 	l.table.SetCompactType(width <= CompactTypeWidth)
 	l.table.SetShowDownloads(width > HideDownloadsWidth)
+}
+
+func (l *Layout) DetailsVisible() bool { return l.detailsShown }
+
+func (l *Layout) SetPackagesTitle(title string) {
+	if title == "" {
+		title = titlePackagesDefault
+	}
+	l.packagesTitle = title
 }
 
 func (l *Layout) GetSearch() *components.Search         { return l.search }
@@ -215,9 +237,12 @@ func (l *Layout) drawTitles(screen tcell.Screen) {
 		}
 	}
 
-	title(l.leftColumn, titlePackages, l.table.View().HasFocus(), 1)
-	title(l.details.View(), titleDetails, l.details.View().HasFocus(), 2)
+	title(l.leftColumn, l.packagesTitle, l.table.View().HasFocus(), 1)
 	title(l.output.View(), titleOutput, l.output.View().HasFocus(), 1)
+	if !l.detailsShown {
+		return
+	}
+	title(l.details.View(), titleDetails, l.details.View().HasFocus(), 2)
 
 	// The details panel draws its own vertical separator; give it proper
 	// junctions with the borders above and below.

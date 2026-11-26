@@ -192,11 +192,11 @@ func (s *InputService) EnableBrewfileMode() {
 
 // panels returns the focusable main panels in Tab order.
 func (s *InputService) panels() []tview.Primitive {
-	return []tview.Primitive{
-		s.layout.GetTable().View(),
-		s.layout.GetDetails().View(),
-		s.layout.GetOutput().View(),
+	panels := []tview.Primitive{s.layout.GetTable().View()}
+	if s.layout.DetailsVisible() {
+		panels = append(panels, s.layout.GetDetails().View())
 	}
+	return append(panels, s.layout.GetOutput().View())
 }
 
 // focusedPanel returns the index of the focused main panel, or -1 when focus
@@ -221,6 +221,11 @@ func (s *InputService) cyclePanel(dir int) {
 
 // HandleKeyEventInput processes key events and triggers the corresponding actions.
 func (s *InputService) HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKey {
+	// The details panel may have been hidden (narrow screen) while focused.
+	if !s.layout.DetailsVisible() && s.layout.GetDetails().View().HasFocus() {
+		s.appService.GetApp().SetFocus(s.layout.GetTable().View())
+	}
+
 	panel := s.focusedPanel()
 	if panel < 0 {
 		// The search field, modals, help and pickers handle their own keys;
@@ -422,6 +427,7 @@ func (s *InputService) updateFilterUI() {
 		label = "All"
 	}
 	s.layout.GetSearch().Field().SetLabel(tview.Escape("Search (" + label + "): "))
+	s.layout.SetPackagesTitle(s.appService.activeFilter.Title())
 }
 
 // handleFilterPickerEvent shows a picker to combine a status filter
