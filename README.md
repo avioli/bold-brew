@@ -142,7 +142,7 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 |-----|--------|
 | `gg` | Go to top |
 | `gh` | Open the homepage (`brew home`) |
-| `gs` | Open the source repository (`brew source`, formulae, Homebrew 7+) |
+| `gs` | Open the source repository (`brew source`, formulae; only offered on Homebrew 7+) |
 | `gI` | Open the formula or cask definition on GitHub (`brew info --github`) |
 | `gi` | Show `brew info` in the Log |
 | `gd` | Filter to the dependencies, recursively (like `brew deps`); `Esc` clears |

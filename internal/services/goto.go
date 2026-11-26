@@ -23,10 +23,15 @@ type menuItem struct {
 // goMenuItems returns the entries of the g menu. They act on the selected
 // package (except "go to top").
 func (s *InputService) goMenuItems(prevFocus tview.Primitive) []menuItem {
-	return []menuItem{
+	items := []menuItem{
 		{'g', "Go to top", func() { s.goToTop(prevFocus) }},
 		{'h', "Open homepage", s.openHomepage},
-		{'s', "Open source repository", s.openSource},
+	}
+	// brew source arrived in Homebrew 7.
+	if s.appService.hasBrewSource() {
+		items = append(items, menuItem{'s', "Open source repository", s.openSource})
+	}
+	return append(items, []menuItem{
 		{'I', "Open formula/cask on GitHub", func() { s.brewToBrowser("Opening GitHub page of", "info", "--github") }},
 		{'i', "Show brew info in the Log", func() { s.brewToLog("info") }},
 		{'d', "Filter: dependencies (recursive)", s.showDependencies},
@@ -34,7 +39,7 @@ func (s *InputService) goMenuItems(prevFocus tview.Primitive) []menuItem {
 		{'l', "Show brew log in the Log", func() { s.brewToLog("log") }},
 		{'L', "Show brew livecheck in the Log", func() { s.brewToLog("livecheck") }},
 		{'C', "Show brew cat (source) in the Log", func() { s.brewToLog("cat") }},
-	}
+	}...)
 }
 
 // goMenuHelp lists the g menu for the help screen.
@@ -205,7 +210,7 @@ func (s *InputService) openHomepage() {
 }
 
 // openSource opens the selected formula's source repository with
-// `brew source` (Homebrew 7+, formulae only).
+// `brew source` (formulae only). The menu offers it on Homebrew 7+ only.
 func (s *InputService) openSource() {
 	pkg := s.selectedPackage()
 	if pkg == nil {
