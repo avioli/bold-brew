@@ -21,6 +21,8 @@ type HelpSection struct {
 	Keys  []HelpKey
 }
 
+const helpFooter = "j/k to scroll, any other key to close"
+
 const (
 	helpKeyWidth = 22
 	helpBoxWidth = 64
@@ -59,13 +61,19 @@ func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, 
 
 	textView.SetBackgroundColor(h.theme.ModalBgColor)
 	textView.SetTextColor(h.theme.DefaultTextColor)
-	textView.SetBorder(true).
-		SetBorderPadding(0, 0, 2, 2).
+
+	// The hint sits in the frame's footer so it stays visible while the
+	// content scrolls.
+	frame := tview.NewFrame(textView).
+		SetBorders(0, 0, 0, 0, 2, 2).
+		AddText(helpFooter, false, tview.AlignCenter, h.theme.LegendColor)
+	frame.SetBackgroundColor(h.theme.ModalBgColor)
+	frame.SetBorder(true).
 		SetBorderColor(h.theme.BorderColor).
 		SetTitle(" Help ").
 		SetTitleAlign(tview.AlignCenter)
 
-	boxHeight := lines + 2 // borders
+	boxHeight := lines + 3 // borders and footer
 	if maxHeight > 0 {
 		boxHeight = min(boxHeight, maxHeight)
 	}
@@ -75,7 +83,7 @@ func (h *HelpScreen) Build(mainContent tview.Primitive, sections []HelpSection, 
 		AddItem(nil, 0, 1, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(textView, boxHeight, 0, true).
+			AddItem(frame, boxHeight, 0, true).
 			AddItem(nil, 0, 1, false),
 			helpBoxWidth, 0, true).
 		AddItem(nil, 0, 1, false)
@@ -104,10 +112,8 @@ func (h *HelpScreen) buildHelpContent(sections []HelpSection) (string, int) {
 		lines++
 	}
 
-	fmt.Fprintf(&sb, "[%s]j/k to scroll, any other key to close[-]", h.getColorTag(h.theme.LegendColor))
-	lines++
-
-	return sb.String(), lines
+	// Drop the trailing blank line after the last section.
+	return strings.TrimSuffix(sb.String(), "\n"), lines - 1
 }
 
 // formatSection formats a section header
