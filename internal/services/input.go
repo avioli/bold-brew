@@ -616,7 +616,7 @@ func (s *InputService) handleExportEvent() {
 // handleVulnScanEvent scans the selected package for known vulnerabilities using brew vulns.
 func (s *InputService) handleVulnScanEvent() {
 	if !s.appService.vulnsService.IsAvailable() {
-		s.handleVulnInstallPrompt()
+		s.layout.GetNotifier().ShowError(errVulnsUnavailable.Error())
 		return
 	}
 
@@ -626,8 +626,9 @@ func (s *InputService) handleVulnScanEvent() {
 	}
 
 	info := (*s.appService.filteredPackages)[row-1]
-	if info.Type != models.PackageTypeFormula && info.Type != models.PackageTypeCask {
-		s.layout.GetNotifier().ShowWarning("Vulnerability scan only available for Homebrew packages")
+	if info.Type != models.PackageTypeFormula {
+		// brew vulns scans formulae only (not casks, Flatpak or App Store apps).
+		s.layout.GetNotifier().ShowWarning("Vulnerability scan is only available for formulae")
 		return
 	}
 
@@ -656,34 +657,6 @@ func (s *InputService) handleVulnScanEvent() {
 			s.layout.GetDetails().SetContent(&info, cachedVulns)
 		})
 	}()
-}
-
-// handleVulnInstallPrompt asks the user to install brew vulns when it's not available.
-func (s *InputService) handleVulnInstallPrompt() {
-	s.showModal(
-		"brew vulns is not installed.\n\nInstall it now to enable vulnerability scanning?",
-		func() {
-			s.closeModal()
-			s.layout.GetOutput().Clear()
-			go func() {
-				s.appService.app.QueueUpdateDraw(func() {
-					s.layout.GetNotifier().ShowWarning("Installing brew vulns...")
-				})
-				cmd := brewCommand("install", "homebrew/brew-vulns/brew-vulns") // #nosec G204
-				if err := ExecuteCommand(cmd, s.outputWriter()); err != nil {
-					s.appService.app.QueueUpdateDraw(func() {
-						s.layout.GetNotifier().ShowError("Failed to install brew vulns")
-					})
-					return
-				}
-				s.appService.vulnsService.(*VulnsService).resetAvailability()
-				s.appService.app.QueueUpdateDraw(func() {
-					s.layout.GetNotifier().ShowSuccess("brew vulns installed! Press a, then v to scan.")
-				})
-			}()
-		},
-		s.closeModal,
-	)
 }
 
 // showModal displays a modal dialog with the specified text and confirmation/cancellation actions.

@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -10,11 +11,51 @@ import (
 	"bbrew/internal/models"
 )
 
-// vulnResult holds the raw JSON scan result for a single formula.
+// vulnResult holds the raw JSON scan result for a single formula in the
+// legacy (brew-vulns tap) format: a top-level array of these.
 type vulnResult struct {
 	Name            string                 `json:"name"`
 	Version         string                 `json:"version"`
 	Vulnerabilities []models.Vulnerability `json:"vulnerabilities"`
+}
+
+// vulnReport is the `brew vulns --json` output of the built-in command
+// (Homebrew 6+): an object listing findings per formula.
+type vulnReport struct {
+	Findings []struct {
+		Formula         string                 `json:"formula"`
+		Vulnerabilities []models.Vulnerability `json:"vulnerabilities"`
+	} `json:"findings"`
+	Complete bool `json:"complete"`
+}
+
+// parseVulnsJSON extracts the open vulnerabilities from `brew vulns --json`
+// output, in either the current object format or the legacy array format.
+// ok is false when the output could not be parsed.
+func parseVulnsJSON(data []byte) (vulns []models.Vulnerability, ok bool) {
+	vulns = make([]models.Vulnerability, 0)
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return vulns, false
+	}
+	if data[0] == '[' {
+		var results []vulnResult
+		if err := json.Unmarshal(data, &results); err != nil {
+			return vulns, false
+		}
+		for _, r := range results {
+			vulns = append(vulns, r.Vulnerabilities...)
+		}
+		return vulns, true
+	}
+	var report vulnReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		return vulns, false
+	}
+	for _, f := range report.Findings {
+		vulns = append(vulns, f.Vulnerabilities...)
+	}
+	return vulns, true
 }
 
 // VulnsServiceInterface defines the contract for vulnerability scanning.
@@ -31,20 +72,17 @@ type VulnsService struct {
 	cache     map[string][]models.Vulnerability
 }
 
+// errVulnsUnavailable is returned when `brew vulns` does not exist.
+var errVulnsUnavailable = errors.New("brew vulns is not available: it is built into Homebrew 6+, run `brew update`")
+
 var NewVulnsService = func() VulnsServiceInterface {
 	return &VulnsService{
 		cache: make(map[string][]models.Vulnerability),
 	}
 }
 
-// resetAvailability clears the cached availability check so it's re-evaluated on next call.
-func (s *VulnsService) resetAvailability() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.available = nil
-}
-
-// IsAvailable checks if the `brew vulns` command is installed.
+// IsAvailable checks if the `brew vulns` command exists (it is built into
+// Homebrew since 6.0).
 func (s *VulnsService) IsAvailable() bool {
 	s.mu.RLock()
 	if s.available != nil {
@@ -73,7 +111,7 @@ func (s *VulnsService) IsAvailable() bool {
 // while the OSV database is queried.
 func (s *VulnsService) ScanPackage(name string, output io.Writer) ([]models.Vulnerability, error) {
 	if !s.IsAvailable() {
-		return nil, fmt.Errorf("brew vulns is not installed. Install with: brew install homebrew/brew-vulns/brew-vulns")
+		return nil, errVulnsUnavailable
 	}
 
 	// Phase 1: Stream human-readable output in real-time so the user sees progress
@@ -91,14 +129,10 @@ func (s *VulnsService) ScanPackage(name string, output io.Writer) ([]models.Vuln
 	jsonCmd.Stdout = &jsonBuf
 	_ = jsonCmd.Run() // best-effort; if this fails we just skip caching
 
-	vulns := make([]models.Vulnerability, 0)
-	if jsonBuf.Len() > 0 {
-		var results []vulnResult
-		if err := json.Unmarshal(jsonBuf.Bytes(), &results); err == nil {
-			for _, r := range results {
-				vulns = append(vulns, r.Vulnerabilities...)
-			}
-		}
+	vulns, ok := parseVulnsJSON(jsonBuf.Bytes())
+	if !ok {
+		// Unknown result: do not cache "no vulnerabilities".
+		return nil, fmt.Errorf("could not read the brew vulns results")
 	}
 
 	s.mu.Lock()
