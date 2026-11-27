@@ -138,6 +138,7 @@ func (s *AppService) forceRefreshResults() {
 	s.mu.Unlock()
 	s.resetDependencyIndex()
 	s.startDiskScan()
+	s.requestReleaseDates()
 
 	s.app.QueueUpdateDraw(func() {
 		s.search(s.layout.GetSearch().Field().GetText(), false)
@@ -189,6 +190,14 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 		if info.LocallyInstalled && info.Outdated {
 			row.VersionColor = tcell.ColorOrange
 		}
+		// Versions published very recently: yellow, or red when very fresh.
+		_, release := s.releaseInfo(info)
+		switch release {
+		case components.ReleaseFresh:
+			row.VersionColor = tcell.ColorRed
+		case components.ReleaseRecent:
+			row.VersionColor = tcell.ColorYellow
+		}
 
 		// Without colour: installed names bold, outdated versions underlined.
 		// Disabled/deprecated already say so in the description.
@@ -198,6 +207,9 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 			}
 			if info.LocallyInstalled && info.Outdated {
 				row.VersionAttr = tcell.AttrUnderline
+			}
+			if release != components.ReleaseOld {
+				row.VersionAttr |= tcell.AttrReverse
 			}
 		}
 

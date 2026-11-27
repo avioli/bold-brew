@@ -63,6 +63,8 @@ type AppService struct {
 	masService        MasServiceInterface
 	vulnsService      VulnsServiceInterface
 	diskUsage         *DiskUsageService
+	releaseAge        *ReleaseAgeService
+	releaseTimer      *time.Timer           // see scheduleSelectedRelease
 	dataProvider      DataProviderInterface // Direct access for Brewfile operations
 	selfUpdateService SelfUpdateServiceInterface
 	inputService      InputServiceInterface
@@ -107,6 +109,7 @@ var NewAppService = func() AppServiceInterface {
 	s.masService = NewMasService()
 	s.vulnsService = NewVulnsService()
 	s.diskUsage = NewDiskUsageService()
+	s.releaseAge = NewReleaseAgeService()
 	s.inputService = NewInputService(s, s.brewService, s.flatpakService)
 	s.selfUpdateService = NewSelfUpdateService()
 
@@ -251,6 +254,8 @@ func (s *AppService) BuildApp() {
 		return s.diskUsage.Get(pkg.Type, pkg.Name), scanned
 	})
 
+	s.setupReleaseAge()
+
 	// "Required by" in the details panel comes from the dependency index.
 	s.layout.GetDetails().SetRequiredByFunc(func(name string) []string {
 		return s.dependencyIndex().installedDependents(name)
@@ -264,6 +269,7 @@ func (s *AppService) BuildApp() {
 			pkg := &(*s.filteredPackages)[row-1]
 			vulns, _ := s.vulnsService.GetCachedVulns(pkg.Name)
 			s.layout.GetDetails().SetContent(pkg, vulns)
+			s.scheduleSelectedRelease(*pkg)
 		}
 	}
 	s.layout.GetTable().View().SetSelectionChangedFunc(tableSelectionChangedFunc)
@@ -307,6 +313,7 @@ func (s *AppService) BuildApp() {
 	// Initial results: all (or Brewfile) packages, through the start filter.
 	s.inputService.RefreshFilterLabel()
 	s.search("", true)
+	s.requestReleaseDates()
 }
 
 // sortModeFromConfig maps the view.sort setting to a sort mode.
@@ -349,7 +356,3 @@ func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
 }
-
-// releaseAgeChanged is called after the settings were saved, to re-check
-// release dates under the new settings.
-func (s *AppService) releaseAgeChanged() {}

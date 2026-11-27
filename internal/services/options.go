@@ -45,7 +45,7 @@ func optionsForm(c config.Config) []optionField {
 		}})
 	}
 	text := func(label, value string, set func(c *config.Config, v string)) {
-		in := tview.NewInputField().SetText(value).SetFieldWidth(40)
+		in := tview.NewInputField().SetText(value) // fills the row
 		fields = append(fields, optionField{label, in, func(c *config.Config) { set(c, in.GetText()) }})
 	}
 
@@ -92,7 +92,8 @@ func (s *InputService) showOptions(start config.Config) {
 		SetButtonStyle(tcell.StyleDefault.Reverse(true)).
 		SetButtonActivatedStyle(tcell.StyleDefault.Background(s.appService.theme.SuccessColor).
 			Foreground(tcell.ColorBlack).Bold(true)).
-		SetButtonsAlign(tview.AlignCenter)
+		SetButtonsAlign(tview.AlignCenter).
+		SetItemPadding(0)
 	form.SetBorder(true).
 		SetTitle(" Options (Ctrl+S save, Esc cancel) ").
 		SetBorderPadding(0, 0, 1, 1)
@@ -100,9 +101,9 @@ func (s *InputService) showOptions(start config.Config) {
 		form.AddFormItem(f.item)
 	}
 
-	// Mark the focused row: the field styles alone do not show focus on a
-	// checkbox, and NO_COLOR has nothing else.
-	form.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+	// Mark the focused row before each draw: the field styles alone do not
+	// show focus on a checkbox, and NO_COLOR has nothing else.
+	view := &markedForm{Form: form, before: func() {
 		focused, _ := form.GetFocusedItemIndex()
 		for i, f := range fields {
 			prefix := "  "
@@ -118,8 +119,7 @@ func (s *InputService) showOptions(start config.Config) {
 				item.SetLabel(prefix + f.label)
 			}
 		}
-		return x + 1, y, width - 2, height
-	})
+	}}
 
 	save := func() {
 		c := start
@@ -175,12 +175,12 @@ func (s *InputService) showOptions(start config.Config) {
 	}
 
 	width := min(76, max(s.layout.Width()-4, 40))
-	height := min(len(fields)+4, max(s.layout.Height()-2, 10))
+	height := min(len(fields)+5, max(s.layout.Height()-2, 10)) // + borders, gap, buttons, spare
 	centered := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(form, height, 0, true).
+			AddItem(view, height, 0, true).
 			AddItem(nil, 0, 1, false),
 			width, 0, true).
 		AddItem(nil, 0, 1, false)
@@ -189,5 +189,16 @@ func (s *InputService) showOptions(start config.Config) {
 		AddPage("main", s.layout.Root(), true, true).
 		AddPage("options", centered, true, true)
 	s.appService.GetApp().SetRoot(pages, true)
-	s.appService.GetApp().SetFocus(form)
+	s.appService.GetApp().SetFocus(view)
+}
+
+// markedForm runs before ahead of every draw of the form.
+type markedForm struct {
+	*tview.Form
+	before func()
+}
+
+func (f *markedForm) Draw(screen tcell.Screen) {
+	f.before()
+	f.Form.Draw(screen)
 }

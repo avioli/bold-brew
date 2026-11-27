@@ -29,6 +29,7 @@ type Details struct {
 	inlineTitle bool
 	requiredBy  func(name string) []string
 	diskUsage   func(pkg *models.Package) (usage *models.DiskUsage, scanned bool)
+	release     func(pkg *models.Package) (models.ReleaseInfo, int)
 }
 
 func NewDetails(theme *theme.Theme) *Details {
@@ -147,6 +148,7 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 			"[blue]• %s:[-:-:-] %s\n"+
 			"[blue]• Display Name:[-:-:-] %s\n"+
 			"[blue]• Version:[-:-:-] %s\n"+
+			"%s"+
 			"[blue]• Status:[-:-:-] %s%s%s\n"+
 			"%s%s%s"+
 			"[blue]• Homepage:[-:-:-] %s\n\n"+
@@ -156,6 +158,7 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 		nameLabel, tview.Escape(pkg.Name),
 		tview.Escape(pkg.DisplayName),
 		tview.Escape(version),
+		d.releaseBullet(pkg),
 		installedStatus, extraStatus+newStatus(pkg), healthInline,
 		bullet("License", tview.Escape(license)),
 		bullet("Tap", tview.Escape(tap)),

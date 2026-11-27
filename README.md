@@ -76,7 +76,19 @@ Set `NO_COLOR=1` to turn colours off (see [no-color.org](https://no-color.org/))
 Load Brewfiles from local paths or remote URLs. Batch install/remove entire collections. Export your installed packages to a `~/Brewfile` with one keystroke. Supports `brew`, `cask`, `tap`, `mas`, and `flatpak` entries.
 
 ### Security and Health
-On-demand **vulnerability scanning** via `brew vulns` (press `a` then `v`). Deprecated and disabled package warnings with replacement suggestions. Full Homebrew 6.0 compatibility including tap trust and ask mode.
+On-demand **vulnerability scanning** of formulae via `brew vulns` (press `a` then `v`). Deprecated and disabled package warnings with replacement suggestions. Full Homebrew 6.0 compatibility including tap trust and ask mode.
+
+### Release Age
+Very new versions get a moment before you install them. For outdated
+packages and the selected one, bbrew looks up when the version was published:
+for formulae, the time the bottle was published on GHCR; for casks, the
+`Last-Modified` date of the download (not every server sends one). A version
+younger than `recent_hours` (24 by default) shows in yellow, and one younger
+than `fresh_hours` (1) in red. The details panel shows the date. Installing or
+updating such a version always asks first, with a warning, and Update all
+lists them (or holds them back with `hold_in_update_all`). This gives
+vulnerability scanners and reports time to catch up with a release. See
+[Settings](#settings).
 
 ---
 

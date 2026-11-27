@@ -695,6 +695,23 @@ func (s *InputService) confirmAction(text string, fn func()) {
 	s.showModal(text, fn, s.closeModal)
 }
 
+// confirmRelease asks before running fn on pkg. When pkg's version was
+// published within release_age.recent_hours it always asks, with a warning
+// and the anyway question; otherwise it asks unless actions.confirm is off.
+func (s *InputService) confirmRelease(pkg models.Package, text, anyway string, fn func()) {
+	if pkg.Type != models.PackageTypeFormula && pkg.Type != models.PackageTypeCask {
+		s.confirmAction(text, fn)
+		return
+	}
+	s.withRecentReleases([]models.Package{pkg}, func(recent []models.Package) {
+		if len(recent) > 0 {
+			s.showModal(s.recentWarning(recent)+"\n\n"+anyway, fn, s.closeModal)
+			return
+		}
+		s.confirmAction(text, fn)
+	})
+}
+
 // closeModal closes the currently displayed modal dialog and returns focus to the main table view.
 func (s *InputService) closeModal() {
 	s.closeOverlay()
@@ -705,8 +722,9 @@ func (s *InputService) handleInstallPackageEvent() {
 	row, _ := s.layout.GetTable().View().GetSelection()
 	if row > 0 && row-1 < len(*s.appService.filteredPackages) {
 		info := (*s.appService.filteredPackages)[row-1]
-		s.confirmAction(
+		s.confirmRelease(info,
 			fmt.Sprintf("Are you sure you want to install the package: %s?", info.Label()),
+			"Install anyway?",
 			func() {
 				s.closeModal()
 				s.layout.GetOutput().Clear()
@@ -783,8 +801,9 @@ func (s *InputService) handleUpdatePackageEvent() {
 	row, _ := s.layout.GetTable().View().GetSelection()
 	if row > 0 && row-1 < len(*s.appService.filteredPackages) {
 		info := (*s.appService.filteredPackages)[row-1]
-		s.confirmAction(
+		s.confirmRelease(info,
 			fmt.Sprintf("Are you sure you want to update the package: %s?", info.Label()),
+			"Update anyway?",
 			func() {
 				s.closeModal()
 				s.layout.GetOutput().Clear()
@@ -819,39 +838,84 @@ func (s *InputService) handleUpdatePackageEvent() {
 }
 
 // handleUpdateAllPackagesEvent is called when the user presses the update all key (U).
+// Versions published within release_age.recent_hours are listed in the
+// confirmation, and left out when release_age.hold_in_update_all is set.
 func (s *InputService) handleUpdateAllPackagesEvent() {
-	s.confirmAction("Are you sure you want to update all Packages?", func() {
-		s.closeModal()
-		s.layout.GetOutput().Clear()
-		go func() {
+	cfg := config.Get()
+	outdated := s.appService.outdatedPackages(cfg.Actions.Greedy)
+	s.withRecentReleases(outdated, func(recent []models.Package) {
+		hold := cfg.ReleaseAge.HoldInUpdateAll && len(recent) > 0
+		var upgrade []models.Package // nil: plain `brew upgrade`
+		if hold {
+			held := make(map[string]bool)
+			for _, p := range recent {
+				held[string(p.Type)+":"+p.Name] = true
+			}
+			for _, p := range outdated {
+				if !held[string(p.Type)+":"+p.Name] {
+					upgrade = append(upgrade, p)
+				}
+			}
+			if len(upgrade) == 0 && !s.flatpakService.IsFlatpakInstalled() {
+				s.layout.GetNotifier().ShowWarning(fmt.Sprintf(
+					"Nothing to update: all %d outdated packages are recent and held back", len(recent)))
+				return
+			}
+		}
+
+		run := func() { s.runUpdateAll(hold, upgrade) }
+		switch {
+		case hold:
+			s.showModal(fmt.Sprintf("Update all outdated packages except %d held back?\n\n%s",
+				len(recent), s.recentWarning(recent)), run, s.closeModal)
+		case len(recent) > 0:
+			s.showModal(s.recentWarning(recent)+"\n\nUpdate all anyway?", run, s.closeModal)
+		default:
+			s.confirmAction("Are you sure you want to update all Packages?", run)
+		}
+	})
+}
+
+// runUpdateAll upgrades all outdated packages, or only those in upgrade
+// when hold is set, then the Flatpak packages.
+func (s *InputService) runUpdateAll(hold bool, upgrade []models.Package) {
+	s.closeModal()
+	s.layout.GetOutput().Clear()
+	go func() {
+		s.appService.app.QueueUpdateDraw(func() {
+			s.layout.GetNotifier().ShowWarning("Updating all Homebrew packages...")
+		})
+		var err error
+		switch {
+		case !hold:
+			err = s.brewService.UpdateAllPackages(s.outputWriter())
+		case len(upgrade) > 0:
+			err = s.brewService.UpgradePackages(upgrade, s.outputWriter())
+		}
+		if err != nil {
 			s.appService.app.QueueUpdateDraw(func() {
-				s.layout.GetNotifier().ShowWarning("Updating all Homebrew packages...")
+				s.layout.GetNotifier().ShowError("Failed to update Homebrew packages")
 			})
-			if err := s.brewService.UpdateAllPackages(s.outputWriter()); err != nil {
+			return
+		}
+
+		if s.flatpakService.IsFlatpakInstalled() {
+			s.appService.app.QueueUpdateDraw(func() {
+				s.layout.GetNotifier().ShowWarning("Updating all Flatpak packages...")
+			})
+			if err := s.flatpakService.UpdateAllPackages(s.outputWriter()); err != nil {
 				s.appService.app.QueueUpdateDraw(func() {
-					s.layout.GetNotifier().ShowError("Failed to update Homebrew packages")
+					s.layout.GetNotifier().ShowError("Failed to update Flatpak packages")
 				})
 				return
 			}
+		}
 
-			if s.flatpakService.IsFlatpakInstalled() {
-				s.appService.app.QueueUpdateDraw(func() {
-					s.layout.GetNotifier().ShowWarning("Updating all Flatpak packages...")
-				})
-				if err := s.flatpakService.UpdateAllPackages(s.outputWriter()); err != nil {
-					s.appService.app.QueueUpdateDraw(func() {
-						s.layout.GetNotifier().ShowError("Failed to update Flatpak packages")
-					})
-					return
-				}
-			}
-
-			s.appService.app.QueueUpdateDraw(func() {
-				s.layout.GetNotifier().ShowSuccess("Updated all Packages")
-			})
-			s.appService.forceRefreshResults()
-		}()
-	})
+		s.appService.app.QueueUpdateDraw(func() {
+			s.layout.GetNotifier().ShowSuccess("Updated all Packages")
+		})
+		s.appService.forceRefreshResults()
+	}()
 }
 
 // batchOperation defines the configuration for a batch package operation.
