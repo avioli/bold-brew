@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"bbrew/internal/config"
 	"bbrew/internal/models"
 	"bbrew/internal/ui"
 	"bbrew/internal/ui/components"
@@ -45,6 +46,9 @@ func (a *InputAction) matches(event *tcell.EventKey) bool {
 type InputServiceInterface interface {
 	HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKey
 	EnableBrewfileMode()
+	// RefreshFilterLabel updates the search label and panel title for the
+	// active filter.
+	RefreshFilterLabel()
 }
 
 // InputService implements the InputServiceInterface and handles key events for the application.
@@ -55,6 +59,9 @@ type InputService struct {
 	flatpakService FlatpakServiceInterface
 	keyActions     []*InputAction
 	quitArmedAt    time.Time // first quit press while a command was running
+	// overlayCapture, when set, sees keys first while an overlay that needs
+	// them (the options panel) is open. closeOverlay clears it.
+	overlayCapture func(event *tcell.EventKey) *tcell.EventKey
 
 	// Actions for each key input
 	ActionSearch        *InputAction
@@ -71,6 +78,7 @@ type InputService struct {
 	ActionPrevPanel     *InputAction
 	ActionShowDetails   *InputAction
 	ActionHelp          *InputAction
+	ActionOptions       *InputAction
 	ActionBack          *InputAction
 	ActionQuit          *InputAction
 }
@@ -134,6 +142,10 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.ActionHelp = &InputAction{
 		Key: tcell.KeyRune, Rune: '?', Action: s.handleHelpEvent,
 	}
+	s.ActionOptions = &InputAction{
+		Key: tcell.KeyRune, Rune: 'o', KeySlug: "o", Name: "Options (settings file)", Section: sectionView,
+		Action: s.handleOptionsEvent,
+	}
 	s.ActionBack = &InputAction{
 		Key: tcell.KeyEsc, Action: s.handleBack,
 	}
@@ -145,7 +157,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 	s.keyActions = []*InputAction{
 		s.ActionSearch, s.ActionGoMenu, s.ActionMenu, s.ActionFilterPicker, s.ActionSort,
 
-		s.ActionToggleBorders, s.ActionToggleDetails, s.ActionToggleLog, s.ActionNextPanel, s.ActionPrevPanel,
+		s.ActionToggleBorders, s.ActionToggleDetails, s.ActionToggleLog, s.ActionOptions, s.ActionNextPanel, s.ActionPrevPanel,
 		s.ActionShowDetails, s.ActionHelp, s.ActionBack, s.ActionQuit,
 	}
 
@@ -196,9 +208,11 @@ func (s *InputService) cyclePanel(dir int) {
 
 // HandleKeyEventInput processes key events and triggers the corresponding actions.
 func (s *InputService) HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKey {
-	// Q and Ctrl+C quit from anywhere (in the search field, Q is just text).
+	// Q and Ctrl+C quit from anywhere (in the search field and the options
+	// panel, Q is just text).
 	if event.Key() == tcell.KeyCtrlC ||
-		(event.Key() == tcell.KeyRune && event.Rune() == 'Q' && !s.layout.GetSearch().Field().HasFocus()) {
+		(event.Key() == tcell.KeyRune && event.Rune() == 'Q' &&
+			!s.layout.GetSearch().Field().HasFocus() && s.overlayCapture == nil) {
 		s.handleQuitEvent()
 		return nil
 	}
@@ -210,6 +224,9 @@ func (s *InputService) HandleKeyEventInput(event *tcell.EventKey) *tcell.EventKe
 	}
 
 	panel := s.focusedPanel()
+	if panel < 0 && s.overlayCapture != nil {
+		return s.overlayCapture(event)
+	}
 	if panel < 0 {
 		// The search field, modals, help and pickers handle their own keys;
 		// Esc closes overlays.
@@ -357,6 +374,7 @@ func (s *InputService) handleShowDetails() {
 
 // closeOverlay returns from a modal, help or picker to the main layout.
 func (s *InputService) closeOverlay() {
+	s.overlayCapture = nil
 	s.appService.GetApp().SetRoot(s.layout.Root(), true)
 	s.appService.GetApp().SetFocus(s.layout.GetTable().View())
 }
@@ -495,6 +513,8 @@ func (s *InputService) applyFilter() {
 	s.appService.search(s.layout.GetSearch().Field().GetText(), true)
 }
 
+func (s *InputService) RefreshFilterLabel() { s.updateFilterUI() }
+
 // updateFilterUI updates the search label based on the current filter state.
 func (s *InputService) updateFilterUI() {
 	if r := s.appService.relation; r != nil {
@@ -603,7 +623,7 @@ func (s *InputService) handleSortEvent() {
 	s.layout.GetNotifier().ShowSuccess(fmt.Sprintf("Sort: %s", newSort))
 }
 
-// handleExportEvent exports installed packages to ~/Brewfile.
+// handleExportEvent exports installed packages to the configured Brewfile.
 func (s *InputService) handleExportEvent() {
 	path, err := s.appService.ExportBrewfile()
 	if err != nil {
@@ -666,6 +686,15 @@ func (s *InputService) showModal(text string, confirmFunc func(), cancelFunc fun
 	s.appService.app.SetRoot(modal, true)
 }
 
+// confirmAction asks before running fn, unless actions.confirm is off.
+func (s *InputService) confirmAction(text string, fn func()) {
+	if !config.Get().Actions.Confirm {
+		fn()
+		return
+	}
+	s.showModal(text, fn, s.closeModal)
+}
+
 // closeModal closes the currently displayed modal dialog and returns focus to the main table view.
 func (s *InputService) closeModal() {
 	s.closeOverlay()
@@ -676,7 +705,7 @@ func (s *InputService) handleInstallPackageEvent() {
 	row, _ := s.layout.GetTable().View().GetSelection()
 	if row > 0 && row-1 < len(*s.appService.filteredPackages) {
 		info := (*s.appService.filteredPackages)[row-1]
-		s.showModal(
+		s.confirmAction(
 			fmt.Sprintf("Are you sure you want to install the package: %s?", info.Label()),
 			func() {
 				s.closeModal()
@@ -706,7 +735,7 @@ func (s *InputService) handleInstallPackageEvent() {
 						s.appService.forceRefreshResults()
 					}
 				}()
-			}, s.closeModal)
+			})
 	}
 }
 
@@ -715,7 +744,7 @@ func (s *InputService) handleRemovePackageEvent() {
 	row, _ := s.layout.GetTable().View().GetSelection()
 	if row > 0 && row-1 < len(*s.appService.filteredPackages) {
 		info := (*s.appService.filteredPackages)[row-1]
-		s.showModal(
+		s.confirmAction(
 			fmt.Sprintf("Are you sure you want to remove the package: %s?", info.Label()),
 			func() {
 				s.closeModal()
@@ -745,7 +774,7 @@ func (s *InputService) handleRemovePackageEvent() {
 						s.appService.forceRefreshResults()
 					}
 				}()
-			}, s.closeModal)
+			})
 	}
 }
 
@@ -754,7 +783,7 @@ func (s *InputService) handleUpdatePackageEvent() {
 	row, _ := s.layout.GetTable().View().GetSelection()
 	if row > 0 && row-1 < len(*s.appService.filteredPackages) {
 		info := (*s.appService.filteredPackages)[row-1]
-		s.showModal(
+		s.confirmAction(
 			fmt.Sprintf("Are you sure you want to update the package: %s?", info.Label()),
 			func() {
 				s.closeModal()
@@ -785,13 +814,13 @@ func (s *InputService) handleUpdatePackageEvent() {
 						s.appService.forceRefreshResults()
 					}
 				}()
-			}, s.closeModal)
+			})
 	}
 }
 
 // handleUpdateAllPackagesEvent is called when the user presses the update all key (U).
 func (s *InputService) handleUpdateAllPackagesEvent() {
-	s.showModal("Are you sure you want to update all Packages?", func() {
+	s.confirmAction("Are you sure you want to update all Packages?", func() {
 		s.closeModal()
 		s.layout.GetOutput().Clear()
 		go func() {
@@ -822,7 +851,7 @@ func (s *InputService) handleUpdateAllPackagesEvent() {
 			})
 			s.appService.forceRefreshResults()
 		}()
-	}, s.closeModal)
+	})
 }
 
 // batchOperation defines the configuration for a batch package operation.

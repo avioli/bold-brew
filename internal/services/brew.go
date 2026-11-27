@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 
+	"bbrew/internal/config"
 	"bbrew/internal/models"
 )
 
@@ -49,6 +50,7 @@ type BrewServiceInterface interface {
 	GetBrewVersion() (string, error)
 	UpdateHomebrew() error
 	UpdateAllPackages(output io.Writer) error
+	UpgradePackages(pkgs []models.Package, output io.Writer) error
 	UpdatePackage(info models.Package, output io.Writer) error
 	RemovePackage(info models.Package, output io.Writer) error
 	InstallPackage(info models.Package, output io.Writer) error
@@ -89,10 +91,39 @@ func (s *BrewService) UpdateHomebrew() error {
 	return cmd.Run()
 }
 
-// UpdateAllPackages upgrades all outdated packages.
+// UpdateAllPackages upgrades all outdated packages; with greedy set, casks
+// that update themselves too.
 func (s *BrewService) UpdateAllPackages(output io.Writer) error {
-	cmd := brewCommand("upgrade") // #nosec G204
-	return ExecuteCommand(cmd, output)
+	return ExecuteCommand(brewCommand(upgradeArgs(nil)...), output) // #nosec G204
+}
+
+// UpgradePackages upgrades the named packages only.
+func (s *BrewService) UpgradePackages(pkgs []models.Package, output io.Writer) error {
+	return ExecuteCommand(brewCommand(upgradeArgs(pkgs)...), output) // #nosec G204
+}
+
+// upgradeArgs builds `brew upgrade [--greedy] [names...]`. Formulae and casks
+// can be mixed: brew resolves each name, and formula names win clashes, so a
+// cask whose token is also a formula name is passed as homebrew/cask/<token>.
+func upgradeArgs(pkgs []models.Package) []string {
+	args := []string{"upgrade"}
+	if config.Get().Actions.Greedy {
+		args = append(args, "--greedy")
+	}
+	formulae := make(map[string]bool)
+	for _, p := range pkgs {
+		if p.Type == models.PackageTypeFormula {
+			formulae[p.Name] = true
+		}
+	}
+	for _, p := range pkgs {
+		name := p.Name
+		if p.Type == models.PackageTypeCask && formulae[name] {
+			name = "homebrew/cask/" + name
+		}
+		args = append(args, name)
+	}
+	return args
 }
 
 // UpdatePackage upgrades a specific package.

@@ -6,13 +6,16 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+
+	"bbrew/internal/config"
 )
 
-// Default cache TTL values
-const (
-	cacheDefaultTTL = 24 * time.Hour // Remote API data (formulae, casks, analytics)
-	cacheShortTTL   = 1 * time.Hour  // Installed package data (refreshed more frequently)
-)
+// cacheShortTTL is how long installed package data is reused.
+const cacheShortTTL = 1 * time.Hour
+
+// cacheDefaultTTL is how long remote API data (formulae, casks, analytics)
+// is reused; see the cache.api_ttl_hours setting.
+func cacheDefaultTTL() time.Duration { return config.Get().Cache.APITTL() }
 
 // getCacheDir returns the cache directory following XDG Base Directory Specification.
 func getCacheDir() string {
@@ -31,7 +34,7 @@ func ensureCacheDir() error {
 // readCacheFile reads a cached file if it exists, meets minimum size requirements,
 // and is not older than the specified TTL. Returns nil if cache should not be used.
 func readCacheFile(filename string, minSize int64) []byte {
-	return readCacheFileWithTTL(filename, minSize, cacheDefaultTTL)
+	return readCacheFileWithTTL(filename, minSize, cacheDefaultTTL())
 }
 
 // readCacheFileWithTTL reads a cached file with a custom TTL.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bbrew/internal/config"
 	"bbrew/internal/services"
 	"flag"
 	"fmt"
@@ -22,6 +23,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  -f <path|url> Path or URL to Brewfile\n")
 		fmt.Fprintf(os.Stderr, "  -v, --version Show version information\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help    Show this help message\n")
+		fmt.Fprintf(os.Stderr, "\nSettings: %s (press o in bbrew)\n", config.Path())
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  bbrew                    Launch the TUI with all packages\n")
 		fmt.Fprintf(os.Stderr, "  bbrew -f ~/Brewfile      Launch with packages from local Brewfile\n")
@@ -49,8 +51,16 @@ func main() {
 		defer cleanup()
 	}
 
+	// Load settings before anything reads them. A broken file is reported
+	// in the status line once the TUI is up; the defaults are used.
+	cfg, cfgErr := config.Load(config.Path())
+	config.Set(cfg)
+
 	// Initialize app service
 	appService := services.NewAppService()
+	if cfgErr != nil {
+		appService.SetStartupWarning(fmt.Sprintf("Settings not loaded, using defaults: %v", cfgErr))
+	}
 	// Configure Brewfile mode if path was provided
 	if *brewfilePath != "" {
 		appService.SetBrewfilePath(*brewfilePath)

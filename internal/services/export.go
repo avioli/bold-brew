@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"bbrew/internal/config"
 	"bbrew/internal/models"
 )
 
@@ -80,11 +81,15 @@ func (s *AppService) ExportBrewfile() (string, error) {
 		}
 	}
 
-	home, err := os.UserHomeDir()
+	outputPath, err := config.Get().Actions.ExpandedExportPath()
 	if err != nil {
-		home = "."
+		return "", fmt.Errorf("export path: %w", err)
 	}
-	outputPath := filepath.Join(home, "Brewfile")
+	if dir := filepath.Dir(outputPath); dir != "" {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			return "", fmt.Errorf("failed to create %s: %w", dir, err)
+		}
+	}
 
 	if err := os.WriteFile(outputPath, []byte(sb.String()), 0600); err != nil {
 		return "", fmt.Errorf("failed to write Brewfile: %w", err)

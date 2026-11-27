@@ -176,7 +176,7 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 | `al` / `aL` | Link / unlink a formula |
 | `as` / `aS` / `aT` | Start / stop / restart a formula's service (`brew services`) |
 | `av` | Vulnerability scan |
-| `ae` | Export installed packages to ~/Brewfile |
+| `ae` | Export installed packages to a Brewfile (`~/Brewfile`, see Settings) |
 
 ### Brewfile Mode
 
@@ -193,8 +193,50 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 | `D` | Toggle the details panel (also hidden automatically on narrow terminals) |
 | `L` | Toggle the Log panel (it reappears when a command writes to it) |
 | `Alt+Up` / `Alt+Down` | Grow / shrink the Log |
+| `o` | Options: edit the settings file (Ctrl+S saves, Esc cancels) |
 
 </details>
+
+## Settings
+
+Settings live in `$XDG_CONFIG_HOME/bbrew/config.toml`, or
+`~/.config/bbrew/config.toml` when `XDG_CONFIG_HOME` is unset (on macOS too).
+Press `o` to edit them in bbrew, or edit the file directly. Missing keys use
+the defaults below, and invalid values are replaced when the file is loaded.
+
+```toml
+[view]                       # how the main screen starts
+sort = "name"                # name | downloads | rank | size
+filter = "none"              # none | installed | outdated | leaves | new
+kind = "all"                 # all | formulae | casks
+borders = true
+details = true
+log = true
+log_height = 5
+
+[startup]
+brew_update = true           # run `brew update` in the background
+check_bbrew_update = true    # look for a newer bbrew
+disk_scan = true             # measure disk usage (Size column, details)
+
+[release_age]
+mode = "selected"            # look up release dates: selected | outdated | off
+casks = true                 # casks: Last-Modified of the download URL
+recent_hours = 24            # flag younger versions, warn before upgrading
+fresh_hours = 1              # flag younger versions as very fresh
+hold_in_update_all = false   # leave recent versions out of Update all
+
+[actions]
+confirm = true               # ask before install, update, remove, reinstall
+greedy = false               # Update all also upgrades self-updating casks
+export_path = "~/Brewfile"   # where `ae` writes the Brewfile
+
+[vulns]
+min_severity = "any"         # any | low | medium | high | critical
+
+[cache]
+api_ttl_hours = 24           # reuse the downloaded formula and cask lists
+```
 
 ---
 

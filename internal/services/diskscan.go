@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"bbrew/internal/config"
 	"bbrew/internal/models"
 	"bbrew/internal/ui/components"
 )
@@ -15,6 +16,9 @@ import (
 // the totals are reported at the end.
 // A scan started while another runs replaces it.
 func (s *AppService) startDiskScan() {
+	if !config.Get().Startup.DiskScan {
+		return
+	}
 	s.mu.RLock()
 	pkgs := make([]models.Package, len(*s.packages))
 	copy(pkgs, *s.packages)

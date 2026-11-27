@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"bbrew/internal/config"
 	"bbrew/internal/models"
 	"bbrew/internal/ui"
 	"bbrew/internal/ui/theme"
@@ -29,6 +30,8 @@ type AppServiceInterface interface {
 	SetBrewfilePath(path string)
 	IsBrewfileMode() bool
 	GetBrewfilePackages() *[]models.Package
+	// SetStartupWarning shows msg in the status line when the TUI starts.
+	SetStartupWarning(msg string)
 	// ExitLog is output to print after the TUI exits (the log of a command
 	// stopped by quitting), or "".
 	ExitLog() string
@@ -64,8 +67,9 @@ type AppService struct {
 	selfUpdateService SelfUpdateServiceInterface
 	inputService      InputServiceInterface
 
-	exitLog string // see ExitLog
-	noColor bool   // NO_COLOR is set
+	exitLog        string // see ExitLog
+	startupWarning string // see SetStartupWarning
+	noColor        bool   // NO_COLOR is set
 }
 
 // NewAppService creates a new instance of AppService with initialized components.
@@ -120,8 +124,9 @@ func (s *AppService) SetBrewfilePath(path string) {
 	}
 }
 
-func (s *AppService) ExitLog() string      { return s.exitLog }
-func (s *AppService) IsBrewfileMode() bool { return s.brewfilePath != "" }
+func (s *AppService) ExitLog() string              { return s.exitLog }
+func (s *AppService) SetStartupWarning(msg string) { s.startupWarning = msg }
+func (s *AppService) IsBrewfileMode() bool         { return s.brewfilePath != "" }
 
 // outputWriter returns a thread-safe writer that streams to the output panel.
 func (s *AppService) outputWriter() *ui.ThreadSafeWriter {
@@ -182,8 +187,15 @@ func (s *AppService) updateHomeBrew() {
 
 // BuildApp builds the application layout, sets up event handlers, and initializes the UI components.
 func (s *AppService) BuildApp() {
+	cfg := config.Get()
+
 	// Build the layout
 	s.layout.Setup()
+	s.layout.ApplyPrefs(cfg.View.Borders, cfg.View.Details, cfg.View.Log, cfg.View.LogHeight)
+	if !s.IsBrewfileMode() {
+		s.activeSort = sortModeFromConfig(cfg.View.Sort)
+	}
+	s.activeFilter = filterFromConfig(cfg.View.Filter, cfg.View.Kind)
 
 	// Enable Brewfile mode features if needed
 	if s.IsBrewfileMode() {
@@ -194,6 +206,9 @@ func (s *AppService) BuildApp() {
 	// Status messages are queued; let the notifier redraw from its timer.
 	s.layout.GetNotifier().SetScheduler(func(f func()) { s.app.QueueUpdateDraw(f) })
 	s.layout.GetNotifier().ShowInfo("Using " + firstLine(s.brewVersion))
+	if s.startupWarning != "" {
+		s.layout.GetNotifier().ShowError(s.startupWarning)
+	}
 
 	// Adapt the layout to the screen width before every draw.
 	s.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
@@ -205,6 +220,9 @@ func (s *AppService) BuildApp() {
 	// Evaluate if there is a new version available
 	// This is done in a goroutine to avoid blocking the UI during startup
 	go func() {
+		if !cfg.Startup.CheckBbrewUpdate {
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
@@ -275,20 +293,55 @@ func (s *AppService) BuildApp() {
 			s.installBrewfileTapsAtStartup()
 		}
 		// Then update Homebrew (which will reload all data including new taps)
-		s.updateHomeBrew()
+		if cfg.Startup.BrewUpdate {
+			s.updateHomeBrew()
+		} else {
+			s.forceRefreshResults() // fresh installed state without `brew update`
+		}
 	}()
 
 	// Measure disk usage from the cached data right away; the refresh
 	// after `brew update` measures again.
 	s.startDiskScan()
 
-	// Set initial results based on mode
-	if s.IsBrewfileMode() {
-		*s.filteredPackages = *s.brewfilePackages // Sync filteredPackages
-		s.setResults(s.brewfilePackages, true)    // Show only Brewfile packages
-	} else {
-		s.setResults(s.packages, true) // Show all packages
+	// Initial results: all (or Brewfile) packages, through the start filter.
+	s.inputService.RefreshFilterLabel()
+	s.search("", true)
+}
+
+// sortModeFromConfig maps the view.sort setting to a sort mode.
+func sortModeFromConfig(name string) models.SortMode {
+	switch name {
+	case "downloads":
+		return models.SortByDownloads
+	case "rank":
+		return models.SortByRank
+	case "size":
+		return models.SortBySize
 	}
+	return models.SortByName
+}
+
+// filterFromConfig maps the view.filter and view.kind settings to a filter.
+func filterFromConfig(status, kind string) PackageFilter {
+	var f PackageFilter
+	switch status {
+	case "installed":
+		f.Status = StatusInstalled
+	case "outdated":
+		f.Status = StatusOutdated
+	case "leaves":
+		f.Status = StatusLeaves
+	case "new":
+		f.Status = StatusNew
+	}
+	switch kind {
+	case "formulae":
+		f.Kind = KindFormulae
+	case "casks":
+		f.Kind = KindCasks
+	}
+	return f
 }
 
 // firstLine returns the first line of s.
@@ -296,3 +349,7 @@ func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
 }
+
+// releaseAgeChanged is called after the settings were saved, to re-check
+// release dates under the new settings.
+func (s *AppService) releaseAgeChanged() {}

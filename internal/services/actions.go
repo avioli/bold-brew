@@ -35,7 +35,7 @@ func (s *InputService) actionMenuItems() []menuItem {
 		{'S', "Stop service", func() { s.serviceAction("stop", "Stopping", "Stopped") }},
 		{'T', "Restart service", func() { s.serviceAction("restart", "Restarting", "Restarted") }},
 		{'v', "Vulnerability scan", s.handleVulnScanEvent},
-		{'e', "Export installed to ~/Brewfile", s.handleExportEvent},
+		{'e', "Export installed to a Brewfile (see options)", s.handleExportEvent},
 	}
 }
 
@@ -133,8 +133,8 @@ func (s *InputService) handleReinstallEvent() {
 		s.layout.GetNotifier().ShowWarning(fmt.Sprintf("%s is not installed", pkg.Label()))
 		return
 	}
-	s.showModal(fmt.Sprintf("Are you sure you want to reinstall the package: %s?", pkg.Label()), func() {
+	s.confirmAction(fmt.Sprintf("Are you sure you want to reinstall the package: %s?", pkg.Label()), func() {
 		s.closeModal()
 		s.brewAction(brewActionSpec{command: "reinstall", doing: "Reinstalling", done: "Reinstalled", typeFlag: true, refresh: true})
-	}, s.closeModal)
+	})
 }

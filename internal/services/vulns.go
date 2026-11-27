@@ -8,6 +8,7 @@ import (
 	"io"
 	"sync"
 
+	"bbrew/internal/config"
 	"bbrew/internal/models"
 )
 
@@ -115,7 +116,8 @@ func (s *VulnsService) ScanPackage(name string, output io.Writer) ([]models.Vuln
 	}
 
 	// Phase 1: Stream human-readable output in real-time so the user sees progress
-	cmd := brewCommand("vulns", name, "-m", "0") // #nosec G204
+	sevArgs := severityArgs()
+	cmd := brewCommand(append([]string{"vulns", name, "-m", "0"}, sevArgs...)...) // #nosec G204
 	scanErr := ExecuteCommand(cmd, output)
 	// Exit code 1 = vulnerabilities found (not a failure for us)
 	// Exit code 2 = scan error. We still continue to try JSON caching.
@@ -124,7 +126,7 @@ func (s *VulnsService) ScanPackage(name string, output io.Writer) ([]models.Vuln
 	}
 
 	// Phase 2: Fetch JSON for structured caching (fast — brew caches the OSV response)
-	jsonCmd := brewCommand("vulns", name, "--json") // #nosec G204
+	jsonCmd := brewCommand(append([]string{"vulns", name, "--json"}, sevArgs...)...) // #nosec G204
 	var jsonBuf bytes.Buffer
 	jsonCmd.Stdout = &jsonBuf
 	_ = jsonCmd.Run() // best-effort; if this fails we just skip caching
@@ -148,6 +150,14 @@ func (s *VulnsService) GetCachedVulns(name string) ([]models.Vulnerability, bool
 	defer s.mu.RUnlock()
 	vulns, ok := s.cache[name]
 	return vulns, ok
+}
+
+// severityArgs passes the vulns.min_severity setting to brew vulns.
+func severityArgs() []string {
+	if sev := config.Get().Vulns.MinSeverity; sev != "" && sev != "any" {
+		return []string{"--severity=" + sev}
+	}
+	return nil
 }
 
 func pluralY(n int) string {

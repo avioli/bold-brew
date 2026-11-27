@@ -42,6 +42,9 @@ type LayoutInterface interface {
 	ShowLog()
 	// ResizeLog grows (delta > 0) or shrinks the Log when it is visible.
 	ResizeLog(delta int)
+	// ApplyPrefs sets whether borders, the details panel and the Log are
+	// shown, and the Log height.
+	ApplyPrefs(borders, details, log bool, logHeight int)
 	LogVisible() bool
 	// DetailsVisible reports whether the details panel is shown.
 	DetailsVisible() bool
@@ -199,6 +202,16 @@ func (l *Layout) ResizeLog(delta int) {
 		return
 	}
 	l.logHeight = min(max(l.logHeight+delta, minLogHeight), l.maxLogHeight())
+	l.arrangeRows()
+}
+
+func (l *Layout) ApplyPrefs(borders, details, log bool, logHeight int) {
+	l.bordersHidden, l.detailsHidden, l.logHidden = !borders, !details, !log
+	l.logHeight = max(logHeight, minLogHeight)
+	if l.height > 0 {
+		l.logHeight = min(l.logHeight, l.maxLogHeight())
+	}
+	l.dirty = true
 	l.arrangeRows()
 }
 
