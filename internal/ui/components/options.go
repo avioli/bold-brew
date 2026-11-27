@@ -78,7 +78,7 @@ func NewOptionsView(items []*OptionItem) *OptionsView {
 		Box:          tview.NewBox(),
 		items:        items,
 		changedStyle: tcell.StyleDefault.Foreground(tcell.ColorYellow).Bold(true),
-		headerStyle:  tcell.StyleDefault.Foreground(tview.Styles.TitleColor).Bold(true).Underline(true),
+		headerStyle:  tcell.StyleDefault.Foreground(tcell.ColorYellow).Bold(true), // like the details panel headings
 	}
 	v.SetBorder(true).SetBorderPadding(0, 0, 1, 1)
 	return v
