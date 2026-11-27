@@ -70,6 +70,7 @@ func TestDiskUsageScan(t *testing.T) {
 
 	s := NewDiskUsageService()
 	s.homeDir = home
+	s.fullDiskAccess = func() bool { return false }
 	s.getDirs = func() brewDirs { return dirs }
 	progress := 0
 	if !s.Scan(pkgs, func() { progress++ }) {
@@ -122,17 +123,20 @@ func TestDiskUsageScan(t *testing.T) {
 }
 
 func TestDiskUsageProtected(t *testing.T) {
-	s := &DiskUsageService{homeDir: "/Users/me"}
-	for p, want := range map[string]bool{
-		"/Users/me/Documents/x":                 true,
-		"/Users/me/Library/Containers":          true,
-		"/Users/me/Library/Group Containers/a":  true,
-		"/Users/me/Library/Caches/x":            false,
-		"/Users/me/DocumentsX":                  false,
-		"/Library/Application Support/whatever": false,
-	} {
-		if got := s.protected(p); got != want {
-			t.Errorf("protected(%q) = %v, want %v", p, got, want)
+	for _, fda := range []bool{false, true} {
+		s := &DiskUsageService{homeDir: "/Users/me", fullDiskAccess: func() bool { return fda }}
+		for p, want := range map[string]bool{
+			"/Users/me/Documents/x":                 !fda,
+			"/Users/me/Library/Safari/Extensions":   !fda,
+			"/Users/me/Library/Containers":          true, // prompts even with Full Disk Access
+			"/Users/me/Library/Group Containers/a":  true,
+			"/Users/me/Library/Caches/x":            false,
+			"/Users/me/DocumentsX":                  false,
+			"/Library/Application Support/whatever": false,
+		} {
+			if got := s.protected(p); got != want {
+				t.Errorf("fda=%v: protected(%q) = %v, want %v", fda, p, got, want)
+			}
 		}
 	}
 }

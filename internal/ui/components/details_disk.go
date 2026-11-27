@@ -64,7 +64,7 @@ func (d *Details) diskUsageSection(pkg *models.Package) string {
 	}
 	if n := len(u.Skipped); n > 0 {
 		sb.WriteString(bullet("Not checked", fmt.Sprintf("%d protected location%s", n, plural(n))))
-		sb.WriteString("[dim]" + tview.Escape("Reading these would make macOS ask for privacy access:") + "[-:-:-]\n")
+		sb.WriteString("[dim]" + tview.Escape("Not read, to avoid macOS privacy prompts:") + "[-:-:-]\n")
 		for _, p := range u.Skipped {
 			sb.WriteString(tview.Escape("  "+tildePath(p)) + "\n")
 		}

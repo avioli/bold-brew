@@ -16,14 +16,18 @@ import (
 // Homebrew download cache by walking the file system. It never needs root:
 // whatever cannot be read is counted in Unreadable and left out of the sizes.
 type DiskUsageService struct {
-	mu       sync.RWMutex
-	usage    map[string]*models.DiskUsage // by usageKey
-	totals   models.DiskTotals
-	scanned  bool
-	gen      int // bumped by every Scan; older scans drop their results
-	homeDir  string
-	getDirs  func() brewDirs
-	scanLock sync.Mutex // one scan at a time
+	mu      sync.RWMutex
+	usage   map[string]*models.DiskUsage // by usageKey
+	totals  models.DiskTotals
+	scanned bool
+	gen     int // bumped by every Scan; older scans drop their results
+	homeDir string
+
+	fullDiskAccess func() bool // overrides the check, for tests
+	fdaOnce        sync.Once
+	fda            bool
+	getDirs        func() brewDirs
+	scanLock       sync.Mutex // one scan at a time
 }
 
 func NewDiskUsageService() *DiskUsageService {
@@ -303,18 +307,23 @@ func (s *DiskUsageService) expandHome(p string) string {
 	return p
 }
 
-// protectedDirs (under the home directory) make macOS ask the user for
-// permission when the terminal reads them, or are synced from iCloud.
-// bbrew does not touch them, so it never causes a privacy prompt.
-var protectedDirs = []string{
+// appDataDirs (under the home directory) hold other apps' data. Since
+// macOS 14, reading them asks "would like to access data from other apps"
+// even with Full Disk Access, so they are never read.
+var appDataDirs = []string{"Library/Containers", "Library/Group Containers"}
+
+// privacyDirs (under the home directory) need Full Disk Access or a
+// per-folder grant: without one, reading them prompts (Desktop, Documents,
+// ...) or fails. They are read only with Full Disk Access.
+var privacyDirs = []string{
 	"Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music",
-	"Library/Containers", "Library/Group Containers", "Library/Mobile Documents",
-	"Library/Mail", "Library/Messages", "Library/Safari", "Library/Calendars",
-	"Library/Reminders", "Library/HomeKit", "Library/Photos",
+	"Library/Mobile Documents", "Library/Mail", "Library/Messages", "Library/Safari",
+	"Library/Calendars", "Library/Reminders", "Library/HomeKit", "Library/Photos",
 	"Library/Application Support/AddressBook", "Library/Application Support/CallHistoryDB",
 	"Library/Application Support/com.apple.TCC",
 }
 
+// protected reports whether reading p could make macOS ask for permission.
 func (s *DiskUsageService) protected(p string) bool {
 	if s.homeDir == "" {
 		return false
@@ -323,12 +332,36 @@ func (s *DiskUsageService) protected(p string) bool {
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return false
 	}
-	for _, d := range protectedDirs {
-		if rel == d || strings.HasPrefix(rel, d+string(filepath.Separator)) {
-			return true
+	under := func(dirs []string) bool {
+		for _, d := range dirs {
+			if rel == d || strings.HasPrefix(rel, d+string(filepath.Separator)) {
+				return true
+			}
 		}
+		return false
 	}
-	return false
+	if under(appDataDirs) {
+		return true
+	}
+	return under(privacyDirs) && !s.hasFullDiskAccess()
+}
+
+// hasFullDiskAccess reports whether this process (that is, the terminal
+// running it) has Full Disk Access, checked once. Opening the user TCC
+// database needs it, and failing to open it never prompts.
+func (s *DiskUsageService) hasFullDiskAccess() bool {
+	s.fdaOnce.Do(func() {
+		if s.fullDiskAccess != nil {
+			s.fda = s.fullDiskAccess()
+			return
+		}
+		f, err := os.Open(filepath.Join(s.homeDir, "Library/Application Support/com.apple.TCC/TCC.db")) // #nosec G304 - fixed path
+		if err == nil {
+			_ = f.Close()
+			s.fda = true
+		}
+	})
+	return s.fda
 }
 
 // measureCache attributes the files in the Homebrew cache to packages by
