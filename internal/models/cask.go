@@ -25,6 +25,7 @@ type Cask struct {
 	Disabled              bool               `json:"disabled"`
 	DisableDate           interface{}        `json:"disable_date"`
 	DisableReason         interface{}        `json:"disable_reason"`
+	Artifacts             []map[string]any   `json:"artifacts"` // installed paths ("target"), uninstall and zap stanzas
 	TapGitHead            string             `json:"tap_git_head"`
 	RubySourcePath        string             `json:"ruby_source_path"`
 	RubySourceChecksum    RubySourceChecksum `json:"ruby_source_checksum"`

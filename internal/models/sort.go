@@ -7,6 +7,7 @@ const (
 	SortByName      SortMode = iota // Alphabetical A-Z (the default)
 	SortByDownloads                 // Most downloaded first
 	SortByRank                      // Best 90 day analytics rank first
+	SortBySize                      // Most disk space first
 	SortBrewfile                    // Brewfile order (Brewfile mode only)
 )
 
@@ -16,6 +17,8 @@ func (s SortMode) String() string {
 		return "Downloads"
 	case SortByRank:
 		return "Rank"
+	case SortBySize:
+		return "Size"
 	case SortBrewfile:
 		return "Brewfile order"
 	default:
@@ -23,7 +26,7 @@ func (s SortMode) String() string {
 	}
 }
 
-// Next cycles to the next sort mode: Name, Downloads, Rank, then Brewfile
+// Next cycles to the next sort mode: Name, Downloads, Rank, Size, then Brewfile
 // order when brewfile is true.
 func (s SortMode) Next(brewfile bool) SortMode {
 	switch s {
@@ -32,6 +35,8 @@ func (s SortMode) Next(brewfile bool) SortMode {
 	case SortByDownloads:
 		return SortByRank
 	case SortByRank:
+		return SortBySize
+	case SortBySize:
 		if brewfile {
 			return SortBrewfile
 		}

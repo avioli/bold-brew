@@ -17,6 +17,7 @@ const (
 	ColDescription
 	ColDownloads
 	ColRank
+	ColSize
 	numColumns
 )
 
@@ -46,6 +47,7 @@ type Row struct {
 	Description  string
 	Downloads    string
 	Rank         string      // empty when unranked
+	Size         string      // disk usage; empty when not installed or not measured yet
 	NameColor    tcell.Color // tcell.ColorDefault for none
 	VersionColor tcell.Color
 	NameAttr     tcell.AttrMask // e.g. bold, for NO_COLOR
@@ -54,8 +56,8 @@ type Row struct {
 
 // fitInput holds the natural content widths a column layout is computed from.
 type fitInput struct {
-	name, version, downloads, rank int // widest cell over all rows
-	sortColumn                     int
+	name, version, downloads, rank, size int // widest cell over all rows
+	sortColumn                           int
 }
 
 // fitResult is a computed column layout.
@@ -69,7 +71,7 @@ type fitResult struct {
 }
 
 // scrollable columns, in order; Type and Name are always visible (frozen).
-var scrollable = []int{ColVersion, ColDescription, ColDownloads, ColRank}
+var scrollable = []int{ColVersion, ColDescription, ColDownloads, ColRank, ColSize}
 
 func headerText(col int, label string, sortColumn int) string {
 	if col == sortColumn {
@@ -103,6 +105,7 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 	dlFull := headerText(ColDownloads, "Downloads", s)
 	dlShort := headerText(ColDownloads, "Dl", s)
 	rankFull, rankShort := headerText(ColRank, "Rank", s), headerText(ColRank, "#", s)
+	sizeHeader := headerText(ColSize, "Size", s)
 
 	nat := [numColumns]int{
 		ColType:        4, // "Type", "[F]"
@@ -111,6 +114,7 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 		ColDescription: 0, // flexible
 		ColDownloads:   max(in.downloads, w(dlFull)),
 		ColRank:        max(in.rank, w(rankFull)),
+		ColSize:        max(in.size, w(sizeHeader)),
 	}
 	minW := [numColumns]int{
 		ColType:        1,
@@ -119,6 +123,7 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 		ColDescription: minDescWidth,
 		ColDownloads:   max(in.downloads, w(dlShort)),
 		ColRank:        max(in.rank, w(rankShort)),
+		ColSize:        max(in.size, w(sizeHeader)),
 	}
 
 	avail := width - (minW[ColType] + 1) - (minW[ColName] + 1)
@@ -141,6 +146,9 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 					add(ColDownloads, minW[ColDownloads])
 					if minW[ColRank]+1 <= avail-used {
 						add(ColRank, minW[ColRank])
+						if minW[ColSize]+1 <= avail-used {
+							add(ColSize, minW[ColSize])
+						}
 					}
 					return cols, widths, used
 				}
@@ -150,7 +158,7 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 				}
 				add(col, cw)
 				return cols, widths, used // Downloads did not fit beside it
-			case ColDownloads, ColRank:
+			case ColDownloads, ColRank, ColSize:
 				if !dlAllowed || minW[col]+1 > left {
 					return cols, widths, used
 				}
@@ -218,6 +226,7 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 		ColDescription: descHeader,
 		ColDownloads:   dlFull,
 		ColRank:        rankFull,
+		ColSize:        sizeHeader,
 	}
 	if r.compact {
 		r.headers[ColType] = "T"
@@ -234,7 +243,7 @@ func fitColumns(width int, in fitInput, offset int) fitResult {
 }
 
 // Table renders package rows and fits its columns to the available width.
-// Type and Name are frozen; Version, Description, Downloads and Rank scroll
+// Type and Name are frozen; Version, Description, Downloads, Rank and Size scroll
 // horizontally (h/l, Left/Right) when they do not all fit.
 type Table struct {
 	view  *fitTable
@@ -341,6 +350,7 @@ func (t *Table) SetRows(rows []Row, sortColumn int) {
 		t.in.version = max(t.in.version, tview.TaggedStringWidth(tview.Escape(r.Version)))
 		t.in.downloads = max(t.in.downloads, len(r.Downloads))
 		t.in.rank = max(t.in.rank, len(r.Rank))
+		t.in.size = max(t.in.size, len(r.Size))
 	}
 
 	// Render right away when the width is known, so selection works on the
@@ -369,7 +379,7 @@ func (t *Table) render(width int) {
 		h := l.headers[col]
 		text := h
 		if pad := l.widths[col] - tview.TaggedStringWidth(h); pad > 0 {
-			if col == ColDownloads || col == ColRank {
+			if col == ColDownloads || col == ColRank || col == ColSize {
 				text = strings.Repeat(" ", pad) + h
 			} else {
 				text = h + strings.Repeat(" ", pad)
@@ -406,6 +416,8 @@ func (t *Table) render(width int) {
 				c = t.cell(r.Downloads, l.widths[col], tcell.ColorDefault).SetAlign(tview.AlignRight)
 			case ColRank:
 				c = t.cell(r.Rank, l.widths[col], tcell.ColorDefault).SetAlign(tview.AlignRight)
+			case ColSize:
+				c = t.cell(r.Size, l.widths[col], tcell.ColorDefault).SetAlign(tview.AlignRight)
 			}
 			view.SetCell(row, pos, c)
 		}

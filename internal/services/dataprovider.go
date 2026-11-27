@@ -753,8 +753,15 @@ func (d *DataProvider) GetPackages() *[]models.Package {
 		packageMap[cask.Token] = pkg
 	}
 
+	newFormulae, newCasks := newPackageNames(getBrewDirs().Cache)
+
 	*d.allPackages = make([]models.Package, 0, len(packageMap))
 	for _, pkg := range packageMap {
+		if pkg.Type == models.PackageTypeCask {
+			pkg.New = newCasks[pkg.Name]
+		} else {
+			pkg.New = newFormulae[pkg.Name]
+		}
 		*d.allPackages = append(*d.allPackages, pkg)
 	}
 

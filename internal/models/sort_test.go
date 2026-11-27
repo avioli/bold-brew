@@ -28,8 +28,9 @@ func TestSortMode_Next(t *testing.T) {
 	}{
 		{SortByName, false, SortByDownloads},
 		{SortByDownloads, false, SortByRank},
-		{SortByRank, false, SortByName},
-		{SortByRank, true, SortBrewfile},
+		{SortByRank, false, SortBySize},
+		{SortBySize, false, SortByName},
+		{SortBySize, true, SortBrewfile},
 		{SortBrewfile, true, SortByName},
 	}
 

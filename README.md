@@ -58,13 +58,16 @@ Bold Brew is the **official Terminal UI** for managing Homebrew in [**Project Bl
 Manage **Homebrew formulae**, **casks**, **Flatpak**, and **Mac App Store** apps from one interface. The actions menu (`a`) installs, updates, removes, reinstalls, fetches, pins, links, and starts or stops services, with confirmation dialogs and output streamed to the Log panel.
 
 ### Discovery and Filtering
-Fast search across 15,000+ packages. The filter picker (`f`) combines installed, outdated, or leaves with formulae or casks, and the panel title follows along ("Installed Casks"). Jump to a package's dependencies (`gd`) or to what depends on it (`gu`). Sort by download popularity or name. See type indicators `[F]` `[C]` `[M]` at a glance.
+Fast search across 15,000+ packages. The filter picker (`f`) combines installed, outdated, leaves, or new (packages `brew update` added, tagged `[NEW]`) with formulae or casks, and the panel title follows along ("Installed Casks"). Jump to a package's dependencies (`gd`) or to what depends on it (`gu`). Sort by name, download popularity, rank, or disk size. See type indicators `[F]` `[C]` `[M]` at a glance.
 
 ### Details at a Glance
 The Details panel shows much of what `brew info` does, without running it: caveats, license, tap, pinned and keg-only status, install date, runtime, build and optional dependencies, installed packages that require it, conflicts, and aliases. The go menu (`g`) opens a package's homepage, source, or GitHub definition, or shows `brew info`, `log`, `livecheck`, or `cat` in the Log.
 
+### Disk Usage
+Disk usage is measured in the background: the Size column shows what each installed package takes, and the Details panel breaks it down into installed files (with old formula versions that `brew cleanup` would free), download cache, and for casks the app data their zap stanza would remove. It needs no extra permissions; locations macOS guards with privacy prompts (Documents, app containers, and the like) are skipped, and anything unreadable is reported as partial.
+
 ### Fits Your Terminal
-Columns size themselves to the available width. When space runs short, Bold Brew trims padding and borders, shortens headings, hides the Details panel (press `Enter` for a popup, or `D` to toggle it), and lets you scroll the Version, Description, Downloads, and Rank columns with `h`/`l` while Type and Name stay put. Status messages appear at the bottom, each for at least three seconds.
+Columns size themselves to the available width. When space runs short, Bold Brew trims padding and borders, shortens headings, hides the Details panel (press `Enter` for a popup, or `D` to toggle it), and lets you scroll the Version, Description, Downloads, Rank, and Size columns with `h`/`l` while Type and Name stay put. Status messages appear at the bottom, each for at least three seconds.
 
 ### Respects NO_COLOR
 Set `NO_COLOR=1` to turn colours off (see [no-color.org](https://no-color.org/)). Installed packages then show in bold, outdated versions underlined, and menu keys as `(g)`. The variable is passed on to `brew`, which also drops its colours.
@@ -156,8 +159,8 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 
 | Key | Action |
 |-----|--------|
-| `f` | Filter picker: combine Installed/Outdated/Leaves with Formulae/Casks |
-| `s` | Cycle sort (Name, Downloads, Rank; plus Brewfile order in Brewfile mode) |
+| `f` | Filter picker: combine Installed/Outdated/Leaves/New with Formulae/Casks |
+| `s` | Cycle sort (Name, Downloads, Rank, Size; plus Brewfile order in Brewfile mode) |
 
 ### Actions Menu (`a`)
 

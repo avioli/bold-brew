@@ -24,6 +24,9 @@ type Package struct {
 	Analytics90dRank      int
 	Analytics90dDownloads int
 
+	// New since the last `brew update` that changed the package lists
+	New bool
+
 	// Health status
 	Deprecated bool // Marked as deprecated by Homebrew maintainers
 	Disabled   bool // Disabled and no longer available for install

@@ -10,6 +10,7 @@ const (
 	StatusInstalled
 	StatusOutdated
 	StatusLeaves
+	StatusNew // new since the last `brew update` that changed the package lists
 )
 
 // KindFilter narrows packages by their kind.
@@ -47,6 +48,10 @@ func (f PackageFilter) Matches(pkg models.Package) bool {
 		if !pkg.LocallyInstalled || !pkg.InstalledOnRequest {
 			return false
 		}
+	case StatusNew:
+		if !pkg.New {
+			return false
+		}
 	}
 
 	switch f.Kind {
@@ -62,6 +67,7 @@ func (f PackageFilter) Matches(pkg models.Package) bool {
 func (f PackageFilter) Label() string {
 	status := map[StatusFilter]string{
 		StatusInstalled: "Installed", StatusOutdated: "Outdated", StatusLeaves: "Leaves",
+		StatusNew: "New",
 	}[f.Status]
 	kind := map[KindFilter]string{KindFormulae: "Formulae", KindCasks: "Casks"}[f.Kind]
 
@@ -87,6 +93,8 @@ func (f PackageFilter) Title() string {
 		return "Installed " + kind
 	case StatusOutdated:
 		return "Outdated " + kind
+	case StatusNew:
+		return "New " + kind
 	case StatusLeaves:
 		return map[KindFilter]string{
 			KindAll: "Leaves", KindFormulae: "Formula Leaves", KindCasks: "Cask Leaves",

@@ -28,6 +28,7 @@ type Details struct {
 	theme       *theme.Theme
 	inlineTitle bool
 	requiredBy  func(name string) []string
+	diskUsage   func(pkg *models.Package) (usage *models.DiskUsage, scanned bool)
 }
 
 func NewDetails(theme *theme.Theme) *Details {
@@ -155,7 +156,7 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 		nameLabel, tview.Escape(pkg.Name),
 		tview.Escape(pkg.DisplayName),
 		tview.Escape(version),
-		installedStatus, extraStatus, healthInline,
+		installedStatus, extraStatus+newStatus(pkg), healthInline,
 		bullet("License", tview.Escape(license)),
 		bullet("Tap", tview.Escape(tap)),
 		bullet("Auto-updates", autoUpdates),
@@ -171,6 +172,7 @@ func (d *Details) SetContent(pkg *models.Package, vulns []models.Vulnerability) 
 		d.caveatsSection(pkg),
 		d.getVulnInfo(vulns),
 		d.getPackageInstallationDetails(pkg),
+		d.diskUsageSection(pkg),
 		d.dependenciesSection(pkg),
 		d.requiredBySection(pkg),
 		d.conflictsSection(pkg),

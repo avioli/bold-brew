@@ -59,6 +59,10 @@ func (s *AppService) applySortOrder(list []models.Package) {
 		sort.SliceStable(list, func(i, j int) bool {
 			return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name)
 		})
+	case models.SortBySize:
+		sort.SliceStable(list, func(i, j int) bool {
+			return s.installedSize(list[i]) > s.installedSize(list[j])
+		})
 	case models.SortByRank:
 		// Unranked packages (0) go last.
 		sort.SliceStable(list, func(i, j int) bool {
@@ -133,6 +137,7 @@ func (s *AppService) forceRefreshResults() {
 	}
 	s.mu.Unlock()
 	s.resetDependencyIndex()
+	s.startDiskScan()
 
 	s.app.QueueUpdateDraw(func() {
 		s.search(s.layout.GetSearch().Field().GetText(), false)
@@ -149,6 +154,8 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 		sortColumn = components.ColDownloads
 	case models.SortByRank:
 		sortColumn = components.ColRank
+	case models.SortBySize:
+		sortColumn = components.ColSize
 	}
 
 	rows := make([]components.Row, 0, len(*data))
@@ -160,6 +167,7 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 			Description:  info.Description,
 			Downloads:    fmt.Sprintf("%d", info.Analytics90dDownloads),
 			Rank:         rankText(info.Analytics90dRank),
+			Size:         s.sizeText(info),
 			NameColor:    tcell.ColorDefault,
 			VersionColor: tcell.ColorDefault,
 		}
@@ -174,6 +182,9 @@ func (s *AppService) setResults(data *[]models.Package, scrollToTop bool) {
 			row.Description = "[DEPRECATED] " + row.Description
 		case info.LocallyInstalled:
 			row.NameColor = tcell.ColorGreen
+		}
+		if info.New {
+			row.Description = "[NEW] " + row.Description
 		}
 		if info.LocallyInstalled && info.Outdated {
 			row.VersionColor = tcell.ColorOrange

@@ -99,7 +99,7 @@ var NewInputService = func(appService *AppService, brewService BrewServiceInterf
 		Action: s.handleFilterPickerEvent,
 	}
 	s.ActionSort = &InputAction{
-		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Cycle sort (name, downloads, rank)", Section: sectionFilters,
+		Key: tcell.KeyRune, Rune: 's', KeySlug: "s", Name: "Cycle sort (name, downloads, rank, size)", Section: sectionFilters,
 		Action: s.handleSortEvent,
 	}
 	s.ActionInstallAll = &InputAction{
@@ -534,6 +534,7 @@ func (s *InputService) handleFilterPickerEvent() {
 		{"Installed", 'i', func() bool { return filter.Status == StatusInstalled }, func() { filter.ToggleStatus(StatusInstalled) }},
 		{"Outdated", 'o', func() bool { return filter.Status == StatusOutdated }, func() { filter.ToggleStatus(StatusOutdated) }},
 		{"Leaves", 'l', func() bool { return filter.Status == StatusLeaves }, func() { filter.ToggleStatus(StatusLeaves) }},
+		{"New (since last brew update)", 'w', func() bool { return filter.Status == StatusNew }, func() { filter.ToggleStatus(StatusNew) }},
 		{"Formulae", 'f', func() bool { return filter.Kind == KindFormulae }, func() { filter.ToggleKind(KindFormulae) }},
 		{"Casks", 'c', func() bool { return filter.Kind == KindCasks }, func() { filter.ToggleKind(KindCasks) }},
 	}
@@ -541,7 +542,7 @@ func (s *InputService) handleFilterPickerEvent() {
 	// List rows: the options, with separators after None and before
 	// Formulae (status filters in between, kind filters after).
 	const separator = -1
-	rows := []int{0, separator, 1, 2, 3, separator, 4, 5} // option index per row
+	rows := []int{0, separator, 1, 2, 3, 4, separator, 5, 6} // option index per row
 	keys := make([]rune, len(rows))
 	for r, o := range rows {
 		if o != separator {
@@ -593,7 +594,7 @@ func (s *InputService) handleFilterPickerEvent() {
 		prev = r
 	})
 
-	s.showOverlay("filter", list, 28)
+	s.showOverlay("filter", list, 36)
 }
 
 // handleSortEvent cycles through sort modes (None → Downloads → Name).

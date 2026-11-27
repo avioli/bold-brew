@@ -59,6 +59,7 @@ type AppService struct {
 	flatpakService    FlatpakServiceInterface
 	masService        MasServiceInterface
 	vulnsService      VulnsServiceInterface
+	diskUsage         *DiskUsageService
 	dataProvider      DataProviderInterface // Direct access for Brewfile operations
 	selfUpdateService SelfUpdateServiceInterface
 	inputService      InputServiceInterface
@@ -101,6 +102,7 @@ var NewAppService = func() AppServiceInterface {
 	s.flatpakService = NewFlatpakService()
 	s.masService = NewMasService()
 	s.vulnsService = NewVulnsService()
+	s.diskUsage = NewDiskUsageService()
 	s.inputService = NewInputService(s, s.brewService, s.flatpakService)
 	s.selfUpdateService = NewSelfUpdateService()
 
@@ -225,6 +227,12 @@ func (s *AppService) BuildApp() {
 		})
 	})
 
+	// "Disk Usage" in the details panel comes from the background scan.
+	s.layout.GetDetails().SetDiskUsageFunc(func(pkg *models.Package) (*models.DiskUsage, bool) {
+		_, scanned := s.diskUsage.Totals()
+		return s.diskUsage.Get(pkg.Type, pkg.Name), scanned
+	})
+
 	// "Required by" in the details panel comes from the dependency index.
 	s.layout.GetDetails().SetRequiredByFunc(func(name string) []string {
 		return s.dependencyIndex().installedDependents(name)
@@ -269,6 +277,10 @@ func (s *AppService) BuildApp() {
 		// Then update Homebrew (which will reload all data including new taps)
 		s.updateHomeBrew()
 	}()
+
+	// Measure disk usage from the cached data right away; the refresh
+	// after `brew update` measures again.
+	s.startDiskScan()
 
 	// Set initial results based on mode
 	if s.IsBrewfileMode() {
