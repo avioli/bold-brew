@@ -11,9 +11,6 @@ import (
 	"bbrew/internal/models"
 )
 
-// maxDiskPaths is how many paths each disk usage group lists.
-const maxDiskPaths = 6
-
 // SetDiskUsageFunc sets how to look up a package's measured disk usage, for
 // the "Disk Usage" section. scanned is false until the first scan finished.
 func (d *Details) SetDiskUsageFunc(f func(pkg *models.Package) (*models.DiskUsage, bool)) {
@@ -62,11 +59,15 @@ func (d *Details) diskUsageSection(pkg *models.Package) string {
 	if u.PkgFiles {
 		notes = append(notes, "Files installed by the .pkg installer are not counted.")
 	}
-	if n := len(u.Skipped); n > 0 {
-		notes = append(notes, fmt.Sprintf("%d protected location%s skipped (would ask for macOS privacy access).", n, plural(n)))
-	}
 	if u.Unreadable > 0 {
 		notes = append(notes, fmt.Sprintf("Partial: %d item%s unreadable without more permissions.", u.Unreadable, plural(u.Unreadable)))
+	}
+	if n := len(u.Skipped); n > 0 {
+		sb.WriteString(bullet("Not checked", fmt.Sprintf("%d protected location%s", n, plural(n))))
+		sb.WriteString("[dim]" + tview.Escape("Reading these would make macOS ask for privacy access:") + "[-:-:-]\n")
+		for _, p := range u.Skipped {
+			sb.WriteString(tview.Escape("  "+tildePath(p)) + "\n")
+		}
 	}
 	for _, n := range notes {
 		sb.WriteString("[dim]" + tview.Escape(n) + "[-:-:-]\n")
@@ -74,26 +75,26 @@ func (d *Details) diskUsageSection(pkg *models.Package) string {
 	return section("Disk Usage", strings.TrimSuffix(sb.String(), "\n"))
 }
 
-// diskPaths lists the largest paths, indented, with ~ for the home directory.
+// diskPaths lists the paths, largest first, indented.
 func diskPaths(paths []models.SizedPath) string {
 	var sb strings.Builder
-	home, _ := os.UserHomeDir()
-	for i, p := range paths {
-		if i == maxDiskPaths {
-			fmt.Fprintf(&sb, "  [dim]... %d more[-:-:-]\n", len(paths)-i)
-			break
-		}
-		path := p.Path
-		if home != "" && strings.HasPrefix(path, home+string(filepath.Separator)) {
-			path = "~" + path[len(home):]
-		}
-		line := fmt.Sprintf("  %6s %s", FormatBytes(p.Bytes), path)
+	for _, p := range paths {
+		line := fmt.Sprintf("  %6s %s", FormatBytes(p.Bytes), tildePath(p.Path))
 		if p.Label != "" {
 			line += " (" + p.Label + ")"
 		}
 		sb.WriteString(tview.Escape(line) + "\n")
 	}
 	return sb.String()
+}
+
+// tildePath shows the home directory as ~.
+func tildePath(path string) string {
+	home, _ := os.UserHomeDir()
+	if home != "" && strings.HasPrefix(path, home+string(filepath.Separator)) {
+		return "~" + path[len(home):]
+	}
+	return path
 }
 
 func plural(n int) string {
