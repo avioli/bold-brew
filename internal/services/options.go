@@ -9,6 +9,7 @@ import (
 	"github.com/rivo/tview"
 
 	"bbrew/internal/config"
+	"bbrew/internal/ui/components"
 )
 
 // optionField is one row of the options form: how to build it from the
@@ -23,17 +24,16 @@ type optionField struct {
 func optionsForm(c config.Config) []optionField {
 	var fields []optionField
 
-	dropdown := func(label string, options []string, value string, set func(c *config.Config, v string)) {
-		dd := tview.NewDropDown().SetOptions(options, nil).
-			SetCurrentOption(max(slices.Index(options, value), 0))
-		fields = append(fields, optionField{label, dd, func(c *config.Config) {
-			_, v := dd.GetCurrentOption()
+	choice := func(label string, options []string, value string, set func(c *config.Config, v string)) {
+		ch := components.NewChoice(label, options, slices.Index(options, value))
+		fields = append(fields, optionField{label, ch, func(c *config.Config) {
+			_, v := ch.Current()
 			set(c, v)
 		}})
 	}
-	checkbox := func(label string, value bool, set func(c *config.Config, v bool)) {
-		cb := tview.NewCheckbox().SetChecked(value)
-		fields = append(fields, optionField{label, cb, func(c *config.Config) { set(c, cb.IsChecked()) }})
+	toggle := func(label string, value bool, set func(c *config.Config, v bool)) {
+		tg := components.NewToggle(label, value)
+		fields = append(fields, optionField{label, tg, func(c *config.Config) { set(c, tg.On()) }})
 	}
 	number := func(label string, value int, set func(c *config.Config, v int)) {
 		in := tview.NewInputField().SetText(strconv.Itoa(value)).SetFieldWidth(8).
@@ -49,29 +49,29 @@ func optionsForm(c config.Config) []optionField {
 		fields = append(fields, optionField{label, in, func(c *config.Config) { set(c, in.GetText()) }})
 	}
 
-	dropdown("View: start sort", config.SortModes, c.View.Sort, func(c *config.Config, v string) { c.View.Sort = v })
-	dropdown("View: start filter", config.StatusFilters, c.View.Filter, func(c *config.Config, v string) { c.View.Filter = v })
-	dropdown("View: start kind", config.KindFilters, c.View.Kind, func(c *config.Config, v string) { c.View.Kind = v })
-	checkbox("View: borders", c.View.Borders, func(c *config.Config, v bool) { c.View.Borders = v })
-	checkbox("View: details panel", c.View.Details, func(c *config.Config, v bool) { c.View.Details = v })
-	checkbox("View: Log panel", c.View.Log, func(c *config.Config, v bool) { c.View.Log = v })
+	choice("View: start sort", config.SortModes, c.View.Sort, func(c *config.Config, v string) { c.View.Sort = v })
+	choice("View: start filter", config.StatusFilters, c.View.Filter, func(c *config.Config, v string) { c.View.Filter = v })
+	choice("View: start kind", config.KindFilters, c.View.Kind, func(c *config.Config, v string) { c.View.Kind = v })
+	toggle("View: borders", c.View.Borders, func(c *config.Config, v bool) { c.View.Borders = v })
+	toggle("View: details panel", c.View.Details, func(c *config.Config, v bool) { c.View.Details = v })
+	toggle("View: Log panel", c.View.Log, func(c *config.Config, v bool) { c.View.Log = v })
 	number("View: Log height", c.View.LogHeight, func(c *config.Config, v int) { c.View.LogHeight = v })
 
-	checkbox("Startup: brew update", c.Startup.BrewUpdate, func(c *config.Config, v bool) { c.Startup.BrewUpdate = v })
-	checkbox("Startup: check for bbrew update", c.Startup.CheckBbrewUpdate, func(c *config.Config, v bool) { c.Startup.CheckBbrewUpdate = v })
-	checkbox("Startup: measure disk usage", c.Startup.DiskScan, func(c *config.Config, v bool) { c.Startup.DiskScan = v })
+	toggle("Startup: brew update", c.Startup.BrewUpdate, func(c *config.Config, v bool) { c.Startup.BrewUpdate = v })
+	toggle("Startup: check for bbrew update", c.Startup.CheckBbrewUpdate, func(c *config.Config, v bool) { c.Startup.CheckBbrewUpdate = v })
+	toggle("Startup: measure disk usage", c.Startup.DiskScan, func(c *config.Config, v bool) { c.Startup.DiskScan = v })
 
-	dropdown("Release age: look up", config.ReleaseAgeModes, c.ReleaseAge.Mode, func(c *config.Config, v string) { c.ReleaseAge.Mode = v })
-	checkbox("Release age: casks (Last-Modified)", c.ReleaseAge.Casks, func(c *config.Config, v bool) { c.ReleaseAge.Casks = v })
+	choice("Release age: look up", config.ReleaseAgeModes, c.ReleaseAge.Mode, func(c *config.Config, v string) { c.ReleaseAge.Mode = v })
+	toggle("Release age: casks (Last-Modified)", c.ReleaseAge.Casks, func(c *config.Config, v bool) { c.ReleaseAge.Casks = v })
 	number("Release age: recent, hours", c.ReleaseAge.RecentHours, func(c *config.Config, v int) { c.ReleaseAge.RecentHours = v })
 	number("Release age: very fresh, hours", c.ReleaseAge.FreshHours, func(c *config.Config, v int) { c.ReleaseAge.FreshHours = v })
-	checkbox("Release age: hold recent in Update all", c.ReleaseAge.HoldInUpdateAll, func(c *config.Config, v bool) { c.ReleaseAge.HoldInUpdateAll = v })
+	toggle("Release age: hold recent in Update all", c.ReleaseAge.HoldInUpdateAll, func(c *config.Config, v bool) { c.ReleaseAge.HoldInUpdateAll = v })
 
-	checkbox("Actions: confirm install/update/remove", c.Actions.Confirm, func(c *config.Config, v bool) { c.Actions.Confirm = v })
-	checkbox("Actions: Update all is greedy", c.Actions.Greedy, func(c *config.Config, v bool) { c.Actions.Greedy = v })
+	toggle("Actions: confirm install/update/remove", c.Actions.Confirm, func(c *config.Config, v bool) { c.Actions.Confirm = v })
+	toggle("Actions: Update all is greedy", c.Actions.Greedy, func(c *config.Config, v bool) { c.Actions.Greedy = v })
 	text("Actions: export Brewfile to", c.Actions.ExportPath, func(c *config.Config, v string) { c.Actions.ExportPath = v })
 
-	dropdown("Vulns: minimum severity", config.Severities, c.Vulns.MinSeverity, func(c *config.Config, v string) { c.Vulns.MinSeverity = v })
+	choice("Vulns: minimum severity", config.Severities, c.Vulns.MinSeverity, func(c *config.Config, v string) { c.Vulns.MinSeverity = v })
 
 	number("Cache: API lists, hours", c.Cache.APITTLHours, func(c *config.Config, v int) { c.Cache.APITTLHours = v })
 	return fields
@@ -95,14 +95,14 @@ func (s *InputService) showOptions(start config.Config) {
 		SetButtonsAlign(tview.AlignCenter).
 		SetItemPadding(0)
 	form.SetBorder(true).
-		SetTitle(" Options (Ctrl+S save, Esc cancel) ").
+		SetTitle(" Options (←/→ change, Ctrl+S save, Esc cancel) ").
 		SetBorderPadding(0, 0, 1, 1)
 	for _, f := range fields {
 		form.AddFormItem(f.item)
 	}
 
-	// Mark the focused row before each draw: the field styles alone do not
-	// show focus on a checkbox, and NO_COLOR has nothing else.
+	// Mark the focused row before each draw, so moving up and down is easy
+	// to follow (with NO_COLOR too).
 	view := &markedForm{Form: form, before: func() {
 		focused, _ := form.GetFocusedItemIndex()
 		for i, f := range fields {
@@ -111,9 +111,7 @@ func (s *InputService) showOptions(start config.Config) {
 				prefix = "▸ "
 			}
 			switch item := f.item.(type) {
-			case *tview.DropDown:
-				item.SetLabel(prefix + f.label)
-			case *tview.Checkbox:
+			case *components.Choice:
 				item.SetLabel(prefix + f.label)
 			case *tview.InputField:
 				item.SetLabel(prefix + f.label)
@@ -142,34 +140,21 @@ func (s *InputService) showOptions(start config.Config) {
 		AddButton("Defaults", func() { s.showOptions(config.Default()) }).
 		AddButton("Cancel", s.closeOverlay)
 
-	// Keys before the form sees them (the app-level handler would otherwise
-	// close the panel on Esc even with a dropdown list open).
+	// Keys before the form sees them: Ctrl+S saves, Esc cancels, Up/Down
+	// move between rows (Left/Right change a choice, or move the cursor in
+	// a text field).
 	s.overlayCapture = func(event *tcell.EventKey) *tcell.EventKey {
-		item, _ := form.GetFocusedItemIndex()
-		var open bool
-		if item >= 0 {
-			if dd, ok := fields[item].item.(*tview.DropDown); ok {
-				open = dd.IsOpen()
-			}
-		}
 		switch event.Key() {
 		case tcell.KeyCtrlS:
 			save()
 			return nil
 		case tcell.KeyEsc:
-			if open {
-				return event // closes the dropdown list
-			}
 			s.closeOverlay()
 			return nil
 		case tcell.KeyUp:
-			if !open {
-				return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
-			}
+			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
 		case tcell.KeyDown:
-			if !open {
-				return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-			}
+			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
 		}
 		return event
 	}

@@ -108,9 +108,12 @@ func TestOptionsPanel(t *testing.T) {
 	}
 
 	key(tcell.KeyRune, 'o')
-	text := waitFor(t, s.app, screen, "Options (Ctrl+S save, Esc cancel)")
+	text := waitFor(t, s.app, screen, "Options (←/→ change, Ctrl+S save, Esc cancel)")
 	if !strings.Contains(text, "▸ View: start sort") {
 		t.Fatalf("first row not marked:\n%s", text)
+	}
+	if !strings.Contains(text, "‹ name ›") || !strings.Contains(text, "‹ yes ›") {
+		t.Fatalf("choice or toggle values not shown:\n%s", text)
 	}
 
 	// Down moves to the next row.
@@ -143,17 +146,21 @@ func TestOptionsPanel(t *testing.T) {
 
 	// Esc cancels without saving.
 	key(tcell.KeyRune, 'o')
-	waitFor(t, s.app, screen, "Options (Ctrl+S save")
-	key(tcell.KeyRune, ' ') // would change the start sort dropdown... opens it
-	key(tcell.KeyEsc, 0)    // closes the dropdown list only
-	waitFor(t, s.app, screen, "Options (Ctrl+S save")
+	waitFor(t, s.app, screen, "Ctrl+S save, Esc cancel")
+	key(tcell.KeyRight, 0) // start sort: name -> downloads, in place
+	waitFor(t, s.app, screen, "‹ downloads ›")
+	key(tcell.KeyDown, 0) // still moves between rows
+	waitFor(t, s.app, screen, "▸ View: start filter")
 	key(tcell.KeyEsc, 0) // closes the panel
 	deadline := time.Now().Add(2 * time.Second)
-	for strings.Contains(readScreen(s.app, screen), "Options (Ctrl+S") && time.Now().Before(deadline) {
+	for strings.Contains(readScreen(s.app, screen), "Ctrl+S save, Esc cancel") && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if strings.Contains(readScreen(s.app, screen), "Options (Ctrl+S") {
+	if strings.Contains(readScreen(s.app, screen), "Ctrl+S save, Esc cancel") {
 		t.Error("Esc did not close the panel")
+	}
+	if config.Get().View.Sort != "name" {
+		t.Error("Esc saved the changed sort")
 	}
 }
 
