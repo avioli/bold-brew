@@ -100,58 +100,58 @@ func TestOptionsPanel(t *testing.T) {
 	config.Set(config.Default())
 	defer config.Set(config.Default())
 
-	s, in, screen := newSimUI(t)
-	_ = in
-
-	key := func(k tcell.Key, r rune) {
-		screen.InjectKey(k, r, tcell.ModNone)
-	}
+	s, _, screen := newSimUI(t)
+	key := func(k tcell.Key, r rune) { screen.InjectKey(k, r, tcell.ModNone) }
 
 	key(tcell.KeyRune, 'o')
-	text := waitFor(t, s.app, screen, "Options (←/→ change, Ctrl+S save, Esc cancel)")
-	if !strings.Contains(text, "▸ View: start sort") {
-		t.Fatalf("first row not marked:\n%s", text)
-	}
-	if !strings.Contains(text, "‹ name ›") || !strings.Contains(text, "‹ yes ›") {
-		t.Fatalf("choice or toggle values not shown:\n%s", text)
+	text := waitFor(t, s.app, screen, "Ctrl+S save, Esc cancel")
+	for _, want := range []string{"View", "Startup", "▸ Start sort", "‹ name ›", "Alphabetical.", "Save"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q:\n%s", want, text)
+		}
 	}
 
-	// Down moves to the next row.
-	key(tcell.KeyDown, 0)
-	waitFor(t, s.app, screen, "▸ View: start filter")
+	// j moves and the description follows; l changes the value and its
+	// description.
+	key(tcell.KeyRune, 'j')
+	waitFor(t, s.app, screen, "All packages.")
+	key(tcell.KeyRune, 'l')
+	waitFor(t, s.app, screen, "Installed packages only.")
+	key(tcell.KeyRune, 'h')
 
-	// Move to "View: borders" and untick it; Q is not quit in the panel.
-	key(tcell.KeyDown, 0)
-	key(tcell.KeyDown, 0)
-	waitFor(t, s.app, screen, "▸ View: borders")
+	// Borders: Ctrl+N twice, Q is not quit, Space switches it off.
+	key(tcell.KeyCtrlN, 0)
+	key(tcell.KeyCtrlN, 0)
+	waitFor(t, s.app, screen, "▸ Borders")
 	key(tcell.KeyRune, 'Q')
 	key(tcell.KeyRune, ' ')
-	text = waitFor(t, s.app, screen, "Save")
-	if !strings.Contains(text, "Cancel") {
-		t.Errorf("buttons not shown:\n%s", text)
-	}
+	waitFor(t, s.app, screen, "‹ no ›")
 	key(tcell.KeyCtrlS, 0)
 	waitFor(t, s.app, screen, "Settings saved to")
-
 	if config.Get().View.Borders {
 		t.Error("borders still on in the settings in effect")
 	}
 	saved, err := config.Load(config.Path())
-	if err != nil || saved.View.Borders {
+	if err != nil || saved.View.Borders || saved.View.Filter != "none" {
 		t.Errorf("saved file: %+v, %v", saved.View, err)
 	}
 	if _, err := os.Stat(filepath.Join(cfgHome, "bbrew", "config.toml")); err != nil {
 		t.Error(err)
 	}
 
-	// Esc cancels without saving.
+	// Edit the export path: G jumps to the end, k up to it, Enter edits,
+	// j types, Enter keeps; then Esc cancels the panel without saving.
 	key(tcell.KeyRune, 'o')
 	waitFor(t, s.app, screen, "Ctrl+S save, Esc cancel")
-	key(tcell.KeyRight, 0) // start sort: name -> downloads, in place
-	waitFor(t, s.app, screen, "‹ downloads ›")
-	key(tcell.KeyDown, 0) // still moves between rows
-	waitFor(t, s.app, screen, "▸ View: start filter")
-	key(tcell.KeyEsc, 0) // closes the panel
+	key(tcell.KeyRune, 'G')
+	key(tcell.KeyRune, 'k')
+	key(tcell.KeyRune, 'k')
+	waitFor(t, s.app, screen, "▸ Export Brewfile to")
+	key(tcell.KeyEnter, 0)
+	key(tcell.KeyRune, 'j')
+	key(tcell.KeyEnter, 0)
+	waitFor(t, s.app, screen, "~/Brewfilej")
+	key(tcell.KeyEsc, 0)
 	deadline := time.Now().Add(2 * time.Second)
 	for strings.Contains(readScreen(s.app, screen), "Ctrl+S save, Esc cancel") && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
@@ -159,8 +159,8 @@ func TestOptionsPanel(t *testing.T) {
 	if strings.Contains(readScreen(s.app, screen), "Ctrl+S save, Esc cancel") {
 		t.Error("Esc did not close the panel")
 	}
-	if config.Get().View.Sort != "name" {
-		t.Error("Esc saved the changed sort")
+	if config.Get().Actions.ExportPath != "~/Brewfile" {
+		t.Error("Esc saved the edited path")
 	}
 }
 

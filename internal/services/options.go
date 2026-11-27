@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 
 	"github.com/gdamore/tcell/v2"
@@ -12,68 +11,207 @@ import (
 	"bbrew/internal/ui/components"
 )
 
-// optionField is one row of the options form: how to build it from the
-// settings and how to read it back.
+// Options panel sections, in display order.
+const (
+	secView       = "View"
+	secStartup    = "Startup"
+	secReleaseAge = "Release age"
+	secActions    = "Actions"
+	secVulns      = "Vulns"
+	secCache      = "Cache"
+)
+
+// optionField ties an options panel item to the setting it edits.
 type optionField struct {
-	label string
-	item  tview.FormItem
-	read  func(c *config.Config)
+	item *components.OptionItem
+	get  func(c config.Config) string
+	set  func(c *config.Config, v string)
 }
 
-// optionsForm builds the form rows for c, in display order.
-func optionsForm(c config.Config) []optionField {
-	var fields []optionField
+// yesNo converts between bool settings and the panel's yes/no values.
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
 
-	choice := func(label string, options []string, value string, set func(c *config.Config, v string)) {
-		ch := components.NewChoice(label, options, slices.Index(options, value))
-		fields = append(fields, optionField{label, ch, func(c *config.Config) {
-			_, v := ch.Current()
-			set(c, v)
-		}})
-	}
-	toggle := func(label string, value bool, set func(c *config.Config, v bool)) {
-		tg := components.NewToggle(label, value)
-		fields = append(fields, optionField{label, tg, func(c *config.Config) { set(c, tg.On()) }})
-	}
-	number := func(label string, value int, set func(c *config.Config, v int)) {
-		in := tview.NewInputField().SetText(strconv.Itoa(value)).SetFieldWidth(8).
-			SetAcceptanceFunc(tview.InputFieldInteger)
-		fields = append(fields, optionField{label, in, func(c *config.Config) {
-			if v, err := strconv.Atoi(in.GetText()); err == nil {
-				set(c, v)
+// describeBy describes a value: intro, then the value's own text, if any.
+func describeBy(intro string, byValue map[string]string) func(string) string {
+	return func(v string) string {
+		if text := byValue[v]; text != "" {
+			if intro == "" {
+				return text
 			}
-		}})
+			return intro + " " + text
+		}
+		return intro
 	}
-	text := func(label, value string, set func(c *config.Config, v string)) {
-		in := tview.NewInputField().SetText(value) // fills the row
-		fields = append(fields, optionField{label, in, func(c *config.Config) { set(c, in.GetText()) }})
+}
+
+// describe returns a fixed description.
+func describe(text string) func(string) string { return func(string) string { return text } }
+
+// optionFields lists the settings shown in the options panel.
+func optionFields() []optionField {
+	var fields []optionField
+	choice := func(section, label string, choices []string, desc func(string) string,
+		get func(c config.Config) string, set func(c *config.Config, v string)) {
+		fields = append(fields, optionField{&components.OptionItem{
+			Section: section, Label: label, Kind: components.OptionChoice, Choices: choices, Describe: desc,
+		}, get, set})
+	}
+	toggle := func(section, label string, desc func(string) string,
+		get func(c config.Config) bool, set func(c *config.Config, v bool)) {
+		choice(section, label, []string{"no", "yes"}, desc,
+			func(c config.Config) string { return yesNo(get(c)) },
+			func(c *config.Config, v string) { set(c, v == "yes") })
+	}
+	number := func(section, label string, desc func(string) string,
+		get func(c config.Config) int, set func(c *config.Config, v int)) {
+		fields = append(fields, optionField{&components.OptionItem{
+			Section: section, Label: label, Kind: components.OptionNumber, Describe: desc,
+		}, func(c config.Config) string { return strconv.Itoa(get(c)) },
+			func(c *config.Config, v string) {
+				if n, err := strconv.Atoi(v); err == nil {
+					set(c, n)
+				}
+			}})
+	}
+	text := func(section, label string, desc func(string) string,
+		get func(c config.Config) string, set func(c *config.Config, v string)) {
+		fields = append(fields, optionField{&components.OptionItem{
+			Section: section, Label: label, Kind: components.OptionText, Describe: desc,
+		}, get, set})
 	}
 
-	choice("View: start sort", config.SortModes, c.View.Sort, func(c *config.Config, v string) { c.View.Sort = v })
-	choice("View: start filter", config.StatusFilters, c.View.Filter, func(c *config.Config, v string) { c.View.Filter = v })
-	choice("View: start kind", config.KindFilters, c.View.Kind, func(c *config.Config, v string) { c.View.Kind = v })
-	toggle("View: borders", c.View.Borders, func(c *config.Config, v bool) { c.View.Borders = v })
-	toggle("View: details panel", c.View.Details, func(c *config.Config, v bool) { c.View.Details = v })
-	toggle("View: Log panel", c.View.Log, func(c *config.Config, v bool) { c.View.Log = v })
-	number("View: Log height", c.View.LogHeight, func(c *config.Config, v int) { c.View.LogHeight = v })
+	choice(secView, "Start sort", config.SortModes,
+		describeBy("Sort order at start (s cycles it).", map[string]string{
+			"name":      "Alphabetical.",
+			"downloads": "Most downloaded in the last 90 days first.",
+			"rank":      "Best 90 day analytics rank first, unranked last.",
+			"size":      "Most disk space first (needs the disk usage scan).",
+		}),
+		func(c config.Config) string { return c.View.Sort },
+		func(c *config.Config, v string) { c.View.Sort = v })
+	choice(secView, "Start filter", config.StatusFilters,
+		describeBy("Filter at start (f opens the filter picker).", map[string]string{
+			"none":      "All packages.",
+			"installed": "Installed packages only.",
+			"outdated":  "Installed packages with an update available.",
+			"leaves":    "Installed formulae that nothing else depends on.",
+			"new":       "Packages new since the last brew update that changed the lists.",
+		}),
+		func(c config.Config) string { return c.View.Filter },
+		func(c *config.Config, v string) { c.View.Filter = v })
+	choice(secView, "Start kind", config.KindFilters,
+		describeBy("Package kinds shown at start, combined with the filter.", map[string]string{
+			"formulae": "Formulae only.",
+			"casks":    "Casks only.",
+		}),
+		func(c config.Config) string { return c.View.Kind },
+		func(c *config.Config, v string) { c.View.Kind = v })
+	toggle(secView, "Borders",
+		describe("Draw borders around the panels (b toggles). Hidden on narrow terminals anyway."),
+		func(c config.Config) bool { return c.View.Borders },
+		func(c *config.Config, v bool) { c.View.Borders = v })
+	toggle(secView, "Details panel",
+		describe("Show the details panel (D toggles). Hidden on narrow terminals anyway."),
+		func(c config.Config) bool { return c.View.Details },
+		func(c *config.Config, v bool) { c.View.Details = v })
+	toggle(secView, "Log panel",
+		describe("Show the Log panel (L toggles). It reappears when a command writes to it."),
+		func(c config.Config) bool { return c.View.Log },
+		func(c *config.Config, v bool) { c.View.Log = v })
+	number(secView, "Log height",
+		describe(fmt.Sprintf("Rows for the Log panel, %d to %d. Alt+Up/Down resize it while running.",
+			config.MinLogHeight, config.MaxLogHeight)),
+		func(c config.Config) int { return c.View.LogHeight },
+		func(c *config.Config, v int) { c.View.LogHeight = v })
 
-	toggle("Startup: brew update", c.Startup.BrewUpdate, func(c *config.Config, v bool) { c.Startup.BrewUpdate = v })
-	toggle("Startup: check for bbrew update", c.Startup.CheckBbrewUpdate, func(c *config.Config, v bool) { c.Startup.CheckBbrewUpdate = v })
-	toggle("Startup: measure disk usage", c.Startup.DiskScan, func(c *config.Config, v bool) { c.Startup.DiskScan = v })
+	toggle(secStartup, "brew update",
+		describeBy("", map[string]string{
+			"yes": "Run brew update in the background at start, so versions and outdated packages are current.",
+			"no":  "Skip brew update at start; versions are as of Homebrew's last update (installed state is still refreshed).",
+		}),
+		func(c config.Config) bool { return c.Startup.BrewUpdate },
+		func(c *config.Config, v bool) { c.Startup.BrewUpdate = v })
+	toggle(secStartup, "Check for a bbrew update",
+		describe("Look for a newer bbrew at start and say so in the status line."),
+		func(c config.Config) bool { return c.Startup.CheckBbrewUpdate },
+		func(c *config.Config, v bool) { c.Startup.CheckBbrewUpdate = v })
+	toggle(secStartup, "Measure disk usage",
+		describeBy("", map[string]string{
+			"yes": "Measure installed sizes in the background: Size column, sort by size, details.",
+			"no":  "Do not measure disk usage; the Size column stays empty.",
+		}),
+		func(c config.Config) bool { return c.Startup.DiskScan },
+		func(c *config.Config, v bool) { c.Startup.DiskScan = v })
 
-	choice("Release age: look up", config.ReleaseAgeModes, c.ReleaseAge.Mode, func(c *config.Config, v string) { c.ReleaseAge.Mode = v })
-	toggle("Release age: casks (Last-Modified)", c.ReleaseAge.Casks, func(c *config.Config, v bool) { c.ReleaseAge.Casks = v })
-	number("Release age: recent, hours", c.ReleaseAge.RecentHours, func(c *config.Config, v int) { c.ReleaseAge.RecentHours = v })
-	number("Release age: very fresh, hours", c.ReleaseAge.FreshHours, func(c *config.Config, v int) { c.ReleaseAge.FreshHours = v })
-	toggle("Release age: hold recent in Update all", c.ReleaseAge.HoldInUpdateAll, func(c *config.Config, v bool) { c.ReleaseAge.HoldInUpdateAll = v })
+	choice(secReleaseAge, "Look up dates for", config.ReleaseAgeModes,
+		describeBy("", map[string]string{
+			"selected": "Outdated packages, and the package you stop on in the list.",
+			"outdated": "Outdated packages only: the versions an upgrade would install.",
+			"off":      "Nothing: no release dates and no warnings about recent versions.",
+		}),
+		func(c config.Config) string { return c.ReleaseAge.Mode },
+		func(c *config.Config, v string) { c.ReleaseAge.Mode = v })
+	toggle(secReleaseAge, "Casks too",
+		describeBy("", map[string]string{
+			"yes": "Casks too, from the download's Last-Modified header: a HEAD request to the vendor's server. Not every server sends one.",
+			"no":  "Formulae only (bottle dates from GHCR).",
+		}),
+		func(c config.Config) bool { return c.ReleaseAge.Casks },
+		func(c *config.Config, v bool) { c.ReleaseAge.Casks = v })
+	number(secReleaseAge, "Recent, hours",
+		describe("Versions younger than this show yellow, and installing or updating them warns first. 0 turns the warnings off."),
+		func(c config.Config) int { return c.ReleaseAge.RecentHours },
+		func(c *config.Config, v int) { c.ReleaseAge.RecentHours = v })
+	number(secReleaseAge, "Very fresh, hours",
+		describe("Versions younger than this show red. At most the recent hours."),
+		func(c config.Config) int { return c.ReleaseAge.FreshHours },
+		func(c *config.Config, v int) { c.ReleaseAge.FreshHours = v })
+	toggle(secReleaseAge, "Hold recent in Update all",
+		describeBy("", map[string]string{
+			"yes": "Update all upgrades everything except recent versions.",
+			"no":  "Update all upgrades everything, after listing any recent versions.",
+		}),
+		func(c config.Config) bool { return c.ReleaseAge.HoldInUpdateAll },
+		func(c *config.Config, v bool) { c.ReleaseAge.HoldInUpdateAll = v })
 
-	toggle("Actions: confirm install/update/remove", c.Actions.Confirm, func(c *config.Config, v bool) { c.Actions.Confirm = v })
-	toggle("Actions: Update all is greedy", c.Actions.Greedy, func(c *config.Config, v bool) { c.Actions.Greedy = v })
-	text("Actions: export Brewfile to", c.Actions.ExportPath, func(c *config.Config, v string) { c.Actions.ExportPath = v })
+	toggle(secActions, "Confirm actions",
+		describeBy("", map[string]string{
+			"yes": "Ask before install, update, remove and reinstall.",
+			"no":  "Run install, update, remove and reinstall at once. Recent versions still ask first.",
+		}),
+		func(c config.Config) bool { return c.Actions.Confirm },
+		func(c *config.Config, v bool) { c.Actions.Confirm = v })
+	toggle(secActions, "Greedy Update all",
+		describeBy("", map[string]string{
+			"yes": "Update all also upgrades casks that update themselves (brew upgrade --greedy).",
+			"no":  "Update all skips casks that update themselves, like brew upgrade does.",
+		}),
+		func(c config.Config) bool { return c.Actions.Greedy },
+		func(c *config.Config, v bool) { c.Actions.Greedy = v })
+	text(secActions, "Export Brewfile to",
+		describe("Where a, e writes the Brewfile of installed packages. ~ is your home directory."),
+		func(c config.Config) string { return c.Actions.ExportPath },
+		func(c *config.Config, v string) { c.Actions.ExportPath = v })
 
-	choice("Vulns: minimum severity", config.Severities, c.Vulns.MinSeverity, func(c *config.Config, v string) { c.Vulns.MinSeverity = v })
+	choice(secVulns, "Minimum severity", config.Severities,
+		func(v string) string {
+			if v == "any" {
+				return "Report every vulnerability brew vulns finds."
+			}
+			return fmt.Sprintf("Report only vulnerabilities rated %s or higher.", v)
+		},
+		func(c config.Config) string { return c.Vulns.MinSeverity },
+		func(c *config.Config, v string) { c.Vulns.MinSeverity = v })
 
-	number("Cache: API lists, hours", c.Cache.APITTLHours, func(c *config.Config, v int) { c.Cache.APITTLHours = v })
+	number(secCache, "API lists, hours",
+		describe("How long the downloaded formula and cask lists are reused before fetching them again."),
+		func(c config.Config) int { return c.Cache.APITTLHours },
+		func(c *config.Config, v int) { c.Cache.APITTLHours = v })
 	return fields
 }
 
@@ -81,48 +219,20 @@ func optionsForm(c config.Config) []optionField {
 // file and applies what can change live; the start sort and filter apply
 // from the next start.
 func (s *InputService) handleOptionsEvent() {
-	s.showOptions(config.Get())
-}
-
-func (s *InputService) showOptions(start config.Config) {
-	fields := optionsForm(start)
-
-	form := tview.NewForm().
-		SetFieldStyle(tcell.StyleDefault.Reverse(true)).
-		SetButtonStyle(tcell.StyleDefault.Reverse(true)).
-		SetButtonActivatedStyle(tcell.StyleDefault.Background(s.appService.theme.SuccessColor).
-			Foreground(tcell.ColorBlack).Bold(true)).
-		SetButtonsAlign(tview.AlignCenter).
-		SetItemPadding(0)
-	form.SetBorder(true).
-		SetTitle(" Options (←/→ change, Ctrl+S save, Esc cancel) ").
-		SetBorderPadding(0, 0, 1, 1)
-	for _, f := range fields {
-		form.AddFormItem(f.item)
+	start := config.Get()
+	fields := optionFields()
+	items := make([]*components.OptionItem, len(fields))
+	for i, f := range fields {
+		f.item.Value = f.get(start)
+		items[i] = f.item
 	}
-
-	// Mark the focused row before each draw, so moving up and down is easy
-	// to follow (with NO_COLOR too).
-	view := &markedForm{Form: form, before: func() {
-		focused, _ := form.GetFocusedItemIndex()
-		for i, f := range fields {
-			prefix := "  "
-			if i == focused {
-				prefix = "▸ "
-			}
-			switch item := f.item.(type) {
-			case *components.Choice:
-				item.SetLabel(prefix + f.label)
-			case *tview.InputField:
-				item.SetLabel(prefix + f.label)
-			}
-		}
-	}}
+	view := components.NewOptionsView(items)
+	view.SetTitle(" Options (Enter edit, ←/→ change, Ctrl+S save, Esc cancel) ")
 
 	save := func() {
 		c := start
 		for _, f := range fields {
-			f.read(&c)
+			f.set(&c, f.item.Value)
 		}
 		c.Normalize()
 		path := config.Path()
@@ -136,54 +246,32 @@ func (s *InputService) showOptions(start config.Config) {
 		s.appService.releaseAgeChanged()
 		s.layout.GetNotifier().ShowSuccess("Settings saved to " + path)
 	}
-	form.AddButton("Save", save).
-		AddButton("Defaults", func() { s.showOptions(config.Default()) }).
-		AddButton("Cancel", s.closeOverlay)
-
-	// Keys before the form sees them: Ctrl+S saves, Esc cancels, Up/Down
-	// move between rows (Left/Right change a choice, or move the cursor in
-	// a text field).
-	s.overlayCapture = func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyCtrlS:
-			save()
-			return nil
-		case tcell.KeyEsc:
-			s.closeOverlay()
-			return nil
-		case tcell.KeyUp:
-			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
-		case tcell.KeyDown:
-			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	defaults := func() {
+		d := config.Default()
+		for _, f := range fields {
+			f.item.Value = f.get(d)
 		}
-		return event
 	}
+	view.SetButtons([]string{"Save", "Defaults", "Cancel"}, func(i int) {
+		switch i {
+		case 0:
+			save()
+		case 1:
+			defaults()
+		case 2:
+			s.closeOverlay()
+		}
+	}, save, s.closeOverlay)
 
-	width := min(76, max(s.layout.Width()-4, 40))
-	height := min(len(fields)+5, max(s.layout.Height()-2, 10)) // + borders, gap, buttons, spare
-	centered := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(view, height, 0, true).
-			AddItem(nil, 0, 1, false),
-			width, 0, true).
-		AddItem(nil, 0, 1, false)
+	// The view handles every key itself (Esc, and Q as text while editing).
+	s.overlayCapture = func(event *tcell.EventKey) *tcell.EventKey { return event }
+
+	rows := len(fields) + 2*6 // items, section headers and blanks
+	centered := components.NewCentered(view, 84, rows+2+4, 1)
 
 	pages := tview.NewPages().
 		AddPage("main", s.layout.Root(), true, true).
 		AddPage("options", centered, true, true)
 	s.appService.GetApp().SetRoot(pages, true)
 	s.appService.GetApp().SetFocus(view)
-}
-
-// markedForm runs before ahead of every draw of the form.
-type markedForm struct {
-	*tview.Form
-	before func()
-}
-
-func (f *markedForm) Draw(screen tcell.Screen) {
-	f.before()
-	f.Form.Draw(screen)
 }

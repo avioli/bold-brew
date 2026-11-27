@@ -205,7 +205,7 @@ Inside the TUI, press `?` for every shortcut, `a` for package actions, `g` for t
 | `D` | Toggle the details panel (also hidden automatically on narrow terminals) |
 | `L` | Toggle the Log panel (it reappears when a command writes to it) |
 | `Alt+Up` / `Alt+Down` | Grow / shrink the Log |
-| `o` | Options: edit the settings file (Ctrl+S saves, Esc cancels) |
+| `o` | Options: j/k move, h/l change, Enter edits text and numbers, Ctrl+S saves, Esc cancels |
 
 </details>
 
